@@ -21,6 +21,15 @@ type Track struct {
 
 // ScrapeSingleDate scrapes tracks for a single date and returns the count
 func ScrapeSingleDate(dateStr string) (int, error) {
+	// Validate date is not in the future
+	date, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid date format (use YYYY-MM-DD): %v", err)
+	}
+	if date.After(time.Now()) {
+		return 0, fmt.Errorf("cannot scrape future date: %s", dateStr)
+	}
+
 	url := fmt.Sprintf("https://doyoutrackid.com/tracks/%s", dateStr)
 	fmt.Println("Loading:", url)
 
@@ -31,7 +40,7 @@ func ScrapeSingleDate(dateStr string) (int, error) {
 	defer cancel()
 
 	var trackNodes []*cdp.Node
-	err := chromedp.Run(ctx,
+	err = chromedp.Run(ctx,
 		chromedp.Navigate(url),
 		chromedp.Sleep(3*time.Second),
 		chromedp.Nodes(`div.Track_root__fkoK4`, &trackNodes, chromedp.ByQueryAll),
@@ -66,7 +75,7 @@ func ScrapeSingleDate(dateStr string) (int, error) {
 	}
 
 	// Write to CSV in csv/tracks-[date].csv
-	csvDir := "csv"
+	csvDir := filepath.Join("..", "csv")
 	if err := os.MkdirAll(csvDir, 0755); err != nil {
 		return 0, fmt.Errorf("error creating csv directory: %v", err)
 	}
@@ -94,12 +103,13 @@ func ScrapeMonth(monthStr string, progressCallback func(current, total int)) (in
 		return 0, 0, fmt.Errorf("invalid month format (use YYYY-MM): %v", err)
 	}
 	year, mon := t.Year(), t.Month()
+	today := time.Now()
 
-	// Count total days first
+	// Count total days first (cap at today)
 	totalDaysInMonth := 0
 	for day := 1; day <= 31; day++ {
 		d := time.Date(year, mon, day, 0, 0, 0, 0, time.UTC)
-		if d.Month() != mon {
+		if d.Month() != mon || d.After(today) {
 			break
 		}
 		totalDaysInMonth++
@@ -110,7 +120,7 @@ func ScrapeMonth(monthStr string, progressCallback func(current, total int)) (in
 
 	for day := 1; day <= 31; day++ {
 		d := time.Date(year, mon, day, 0, 0, 0, 0, time.UTC)
-		if d.Month() != mon {
+		if d.Month() != mon || d.After(today) {
 			break
 		}
 		dateStr := d.Format("2006-01-02")
@@ -138,14 +148,16 @@ func ScrapeYear(yearStr string, progressCallback func(current, total int)) (int,
 		return 0, 0, fmt.Errorf("invalid year format (use YYYY): %v", err)
 	}
 
-	// Count total days in year first
+	today := time.Now()
+
+	// Count total days in year first (cap at today)
 	totalDaysInYear := 0
 	for m := 1; m <= 12; m++ {
 		t := time.Date(y, time.Month(m), 1, 0, 0, 0, 0, time.UTC)
 		mon := t.Month()
 		for day := 1; day <= 31; day++ {
 			d := time.Date(y, mon, day, 0, 0, 0, 0, time.UTC)
-			if d.Month() != mon {
+			if d.Month() != mon || d.After(today) {
 				break
 			}
 			totalDaysInYear++
@@ -160,7 +172,7 @@ func ScrapeYear(yearStr string, progressCallback func(current, total int)) (int,
 		mon := t.Month()
 		for day := 1; day <= 31; day++ {
 			d := time.Date(y, mon, day, 0, 0, 0, 0, time.UTC)
-			if d.Month() != mon {
+			if d.Month() != mon || d.After(today) {
 				break
 			}
 			dateStr := d.Format("2006-01-02")

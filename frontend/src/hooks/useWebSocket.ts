@@ -23,14 +23,21 @@ export const useWebSocket = () => {
       try {
         const message: WSMessage = JSON.parse(event.data);
         
-        if (message.type === 'job_update' && message.data) {
-          setJobs(prev => ({
-            ...prev,
-            [message.data.id]: message.data
-          }));
+        if (message.type === 'job_update' && message.data && message.data.id) {
+          setJobs(prev => {
+            // Prevent infinite re-renders by checking if job actually changed
+            const existingJob = prev[message.data.id];
+            if (existingJob && JSON.stringify(existingJob) === JSON.stringify(message.data)) {
+              return prev;
+            }
+            return {
+              ...prev,
+              [message.data.id]: message.data
+            };
+          });
         }
       } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+        console.error('Failed to parse WebSocket message:', error, event.data);
       }
     };
 

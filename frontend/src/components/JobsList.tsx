@@ -6,9 +6,19 @@ interface JobsListProps {
 }
 
 export const JobsList = ({ jobs }: JobsListProps) => {
-  const jobsArray = Object.values(jobs).sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  if (!jobs || typeof jobs !== 'object') {
+    return null;
+  }
+
+  const jobsArray = Object.values(jobs)
+    .filter(job => job && job.id && job.created_at)
+    .sort((a, b) => {
+      try {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      } catch {
+        return 0;
+      }
+    });
 
   if (jobsArray.length === 0) {
     return (

@@ -10,10 +10,15 @@ export const StatsPanel = () => {
   const fetchStats = async () => {
     try {
       const response = await apiService.getStats();
-      setStats(response.data);
-      setError(null);
+      if (response?.data) {
+        setStats(response.data);
+        setError(null);
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load statistics');
+      console.error('Failed to fetch stats:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to load statistics');
     } finally {
       setLoading(false);
     }
@@ -58,23 +63,23 @@ export const StatsPanel = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
           label="Total CSVs"
-          value={stats.total_csvs.toLocaleString()}
+          value={(stats.total_csvs ?? 0).toLocaleString()}
           subtitle="Track listings"
         />
         <StatCard
           label="Total Tracks Scraped"
-          value={stats.total_tracks_scraped.toLocaleString()}
+          value={(stats.total_tracks_scraped ?? 0).toLocaleString()}
           subtitle="All time"
         />
         <StatCard
           label="Downloads"
-          value={stats.total_downloads.toLocaleString()}
-          subtitle={`${stats.downloads_size_gb.toFixed(2)} GB`}
+          value={(stats.total_downloads ?? 0).toLocaleString()}
+          subtitle={`${(stats.downloads_size_gb ?? 0).toFixed(2)} GB`}
         />
         <StatCard
           label="NAS Storage"
-          value={stats.nas_downloads.toLocaleString()}
-          subtitle={`${stats.nas_size_gb.toFixed(2)} GB`}
+          value={(stats.nas_downloads ?? 0).toLocaleString()}
+          subtitle={`${(stats.nas_size_gb ?? 0).toFixed(2)} GB`}
         />
       </div>
 

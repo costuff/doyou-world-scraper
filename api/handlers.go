@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -151,7 +153,7 @@ func handleDownloadFromCSV(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		result, err := DownloadFromCSV(req.CSVPath, req.Column, "downloads", "yt-dlp", func(current, total int) {
+		result, err := DownloadFromCSV(req.CSVPath, req.Column, "../downloads", "yt-dlp", func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
 		})
@@ -174,11 +176,11 @@ func handleDownloadFromCSV(c *fiber.Ctx) error {
 
 func handleDownloadAll(c *fiber.Ctx) error {
 	job := NewJob("download_all", fiber.Map{
-		"folder": "csv/",
+		"folder": "../csv/",
 	})
 
 	go func() {
-		result, err := DownloadFromFolder("csv", 5, "downloads", "yt-dlp", func(current, total int) {
+		result, err := DownloadFromFolder("../csv", 5, "../downloads", "yt-dlp", func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
 		})
@@ -213,7 +215,7 @@ func handleDeduplicate(c *fiber.Ctx) error {
 
 	downloadsDir := req.DownloadsDir
 	if downloadsDir == "" {
-		downloadsDir = "downloads"
+		downloadsDir = "../downloads"
 	}
 	nasDir := req.NASDir
 	if nasDir == "" {
@@ -249,7 +251,7 @@ func handleMatchDownloads(c *fiber.Ctx) error {
 	job := NewJob("match_downloads", fiber.Map{})
 
 	go func() {
-		result, err := MatchDownloadsToCSVs("csv", "downloads")
+		result, err := MatchDownloadsToCSVs("../csv", "../downloads")
 		if err != nil {
 			job.Fail(fmt.Sprintf("Matching failed: %v", err))
 			return
@@ -273,40 +275,103 @@ func handleMatchDownloads(c *fiber.Ctx) error {
 }
 
 func handleStats(c *fiber.Ctx) error {
-	// Count CSV files
-	csvFiles, _ := filepath.Glob("csv/*.csv")
-	totalCSVs := len(csvFiles)
+	stats := fiber.Map{
+		"total_csvs":           0,
+		"total_tracks_scraped": 0,
+		"total_downloads":      0,
+		"downloads_size_gb":    0.0,
+		"nas_downloads":        0,
+		"nas_size_gb":          0.0,
+		"earliest_date":        "",
+		"latest_date":          "",
+	}
 
-	// Count downloads
-	var totalMP3s int
-	filepath.Walk("downloads", func(path string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
-			totalMP3s++
-		}
-		return nil
-	})
+	// Count CSV files (fast)
+	csvFiles, err := filepath.Glob("../csv/*.csv")
+	if err == nil {
+		stats["total_csvs"] = len(csvFiles)
 
-	// Get directory sizes
-	var downloadsDirSize, nasDirSize int64
-	filepath.Walk("downloads", func(path string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
-			downloadsDirSize += info.Size()
-		}
-		return nil
-	})
-	filepath.Walk("/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks", func(path string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
-			nasDirSize += info.Size()
-		}
-		return nil
-	})
+		// Count total tracks from CSVs and get date range
+		totalTracks := 0
+		var earliestDate, latestDate string
+		for _, csvFile := range csvFiles {
+			// Count lines in CSV (subtract 1 for header)
+			f, err := os.Open(csvFile)
+			if err == nil {
+				scanner := bufio.NewScanner(f)
+				lineCount := 0
+				for scanner.Scan() {
+					lineCount++
+				}
+				if lineCount > 1 {
+					totalTracks += lineCount - 1
+				}
+				f.Close()
+			}
 
-	return c.JSON(fiber.Map{
-		"total_csv_files":       totalCSVs,
-		"total_downloads":       totalMP3s,
-		"downloads_dir_size_mb": downloadsDirSize / 1024 / 1024,
-		"nas_dir_size_mb":       nasDirSize / 1024 / 1024,
-	})
+			// Extract date from filename (tracks-YYYY-MM-DD.csv)
+			baseName := filepath.Base(csvFile)
+			if len(baseName) >= 21 {
+				dateStr := baseName[7:17] // Extract YYYY-MM-DD
+				if earliestDate == "" || dateStr < earliestDate {
+					earliestDate = dateStr
+				}
+				if latestDate == "" || dateStr > latestDate {
+					latestDate = dateStr
+				}
+			}
+		}
+		stats["total_tracks_scraped"] = totalTracks
+		stats["earliest_date"] = earliestDate
+		stats["latest_date"] = latestDate
+	}
+
+	// Count downloads (with timeout)
+	done := make(chan bool, 1)
+	go func() {
+		var totalMP3s int
+		var downloadsDirSize int64
+		filepath.Walk("../downloads", func(path string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
+				totalMP3s++
+				downloadsDirSize += info.Size()
+			}
+			return nil
+		})
+		stats["total_downloads"] = totalMP3s
+		stats["downloads_size_gb"] = float64(downloadsDirSize) / 1024 / 1024 / 1024
+		done <- true
+	}()
+
+	// Count NAS (with timeout)
+	go func() {
+		var nasMP3s int
+		var nasDirSize int64
+		filepath.Walk("/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks", func(path string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
+				nasMP3s++
+				nasDirSize += info.Size()
+			}
+			return nil
+		})
+		stats["nas_downloads"] = nasMP3s
+		stats["nas_size_gb"] = float64(nasDirSize) / 1024 / 1024 / 1024
+		done <- true
+	}()
+
+	// Wait for downloads scan to complete (max 2 seconds)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+	}
+
+	// Wait for NAS scan to complete (max 3 seconds)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+	}
+
+	return c.JSON(stats)
 }
 
 // Job handlers

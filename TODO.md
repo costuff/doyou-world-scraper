@@ -26,7 +26,14 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Show progress, logs, and results for each operation
 - [x] Real-time job monitoring with WebSocket integration
 - [x] Statistics dashboard (track counts, storage usage, date ranges)
-- [ ] Browse downloaded tracks, search/filter by metadata/genre
+- [ ] Browse downloaded tracks, search/filter by metadata/genre (PRIORITY 1)
+
+## Next Steps Priority Order
+1. **Browse/Search UI** - Track library with search/filter/play functionality
+2. **Metadata Extraction** - Extract detailed audio metadata (BPM, key, genre, etc.)
+3. **Genre Classification** - Auto-categorize tracks using ML models
+4. **Docker Deployment** - Package for Raspberry Pi/CasaOS deployment
+5. **Authentication** - User login and access control
 
 ### Music Metadata & Categorization
 - [ ] Integrate a tool/library to extract audio metadata (artist, title, album, year, genre, etc.)
