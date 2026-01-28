@@ -1,11 +1,12 @@
 # Ignore all files in out and downloads folders
-/out/*
+/csv/*
 /downloads/*
 
 # But keep the folders themselves
-!/out/
+!/csv/
 !/downloads/
 
 # Optionally, keep a .gitkeep file if you want the folders to always exist
-/out/.gitkeep
+/csv/.gitkeep
 /downloads/.gitkeep
+api.log
