@@ -21,10 +21,12 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Add WebSocket support for real-time progress updates
 
 ### Frontend
-- [ ] Build a web dashboard (React or similar)
-- [ ] UI to trigger scraping, downloads, deduplication, and metadata scan
-- [ ] Show progress, logs, and results for each operation
-- [ ] Browse/downloaded tracks, search/filter by metadata/genre
+- [x] Build a web dashboard (React + TypeScript + Vite + Tailwind CSS)
+- [x] UI to trigger scraping, downloads, deduplication, and metadata scan
+- [x] Show progress, logs, and results for each operation
+- [x] Real-time job monitoring with WebSocket integration
+- [x] Statistics dashboard (track counts, storage usage, date ranges)
+- [ ] Browse downloaded tracks, search/filter by metadata/genre
 
 ### Music Metadata & Categorization
 - [ ] Integrate a tool/library to extract audio metadata (artist, title, album, year, genre, etc.)

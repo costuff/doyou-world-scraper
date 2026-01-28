@@ -8,8 +8,8 @@ This is a full-stack music scraper and management system for DoYou World Radio. 
 - **Scraping**: chromedp (headless Chrome) for web scraping
 - **Downloading**: yt-dlp for audio extraction from SoundCloud/YouTube/Spotify/Apple Music
 - **Storage**: Local filesystem + NAS backup at `/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks`
-- **API**: REST API on port 3000 with async job tracking
-- **Frontend**: (Planned) React dashboard
+- **API**: REST API on port 3000 with async job tracking + WebSocket support
+- **Frontend**: React + TypeScript + Vite + Tailwind CSS (port 5173)
 - **Deployment**: (Planned) Docker + Raspberry Pi/CasaOS
 
 ## Project Structure
@@ -25,12 +25,25 @@ doyou-world-scraper/
 │   ├── websocket.go       # WebSocket hub for real-time updates
 │   ├── *_test.go          # Unit tests (16 tests, 53.3% coverage)
 │   └── README.md          # API documentation
+├── frontend/              # React frontend dashboard
+│   ├── src/
+│   │   ├── components/   # React components (JobCard, ScrapeControls, etc.)
+│   │   ├── hooks/        # Custom hooks (useWebSocket)
+│   │   ├── services/     # API client (axios)
+│   │   ├── types/        # TypeScript types
+│   │   ├── App.tsx       # Main app component
+│   │   └── main.tsx      # Entry point
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── README.md
 ├── main.go                # CLI scraper (standalone)
 ├── download_soundcloud.go # CLI downloader (standalone)
 ├── remove_duplicates.go   # CLI deduplicator (standalone)
 ├── match_downloads_to_csv.go # CLI matcher (standalone)
 ├── csv/                   # Scraped CSV files (tracks-YYYY-MM-DD.csv)
 ├── downloads/             # Downloaded MP3 files (~10,000 files, 40GB)
+├── package.json           # Root package.json for dev workflow
 ├── README.md              # Project documentation
 └── TODO.md                # Project roadmap
 
@@ -75,19 +88,27 @@ doyou-world-scraper/
 
 ## API Endpoints
 - `GET /api/v1/health` - Health check
-- `POST /api/v1/scrape/date` - Scrape single date (body: `{"date":"2026-01-28"}`)
-- `POST /api/v1/scrape/month` - Scrape month (body: `{"month":"2026-01"}`)
-- `POST /api/v1/scrape/year` - Scrape year (body: `{"year":"2026"}`)
-- `POST /api/v1/download/csv` - Download from CSV (body: `{"csv_path":"csv/tracks-2026-01-28.csv", "column":5}`)
-- `POST /api/v1/download/all` - Download from all CSVs
-- `POST /api/v1/util/deduplicate` - Remove duplicates (body: `{"downloads_dir":"downloads", "nas_dir":"/Volumes/..."}`)
-- `POST /api/v1/util/match` - Match downloads to CSVs
-- `GET /api/v1/util/stats` - Get statistics
-- `GET /api/v1/jobs` - List all jobs
-- `GET /api/v1/jobs/:id` - Get job by ID
-- `GET /api/v1/ws` - WebSocket endpoint for real-time job updates
+- `PEndpoint**: `ws://localhost:3000/api/v1/ws`
+- **Message Format**: `{"type": "job_update", "data": {...job}}`
+- **Auto-reconnect**: Frontend automatically reconnects on disconnect
+- **Real-time Updates**: Job progress broadcasts to all connected clients
+- **Ping/Pong**: 30-second heartbeat to keep connections alive
 
-## WebSocket Support
+## Frontend Architecture
+- **Framework**: React 18 + TypeScript + Vite
+- **Styling**: Tailwind CSS with dark slate theme
+- **State Management**: React hooks (useState, useEffect, useCallback)
+- **API Client**: Axios with proxy to backend
+- **WebSocket**: Custom useWebSocket hook for real-time job updates
+- **Components**:
+  - `ScrapeControls`: Date/month/year pickers with scrape buttons
+  - `DownloadControls`: Buttons for downloads and utilities
+  - `StatsPanel`: Real-time statistics dashboard (auto-refresh every 30s)
+  - `JobsList`: Live job cards with progress bars
+  - `JobCard`: Individual job display with status colors
+  - `ConnectionStatus`: WebSocket connection indicator
+
+## Data & Statistics
 - **CSV Files**: Stored in `csv/` directory
 - **Downloads**: 9,875 MP3 files (~40GB) in `downloads/` folder
 - **NAS Backup**: 4.3GB at `/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks`
@@ -95,22 +116,74 @@ doyou-world-scraper/
 
 ## Development Guidelines
 
-### Running the API
+### Running Both Servers
 ```bash
-cd /Users/skoutelis/Desktop/workspace/doyou-world-scraper
-go run api/*.go
-# Or build and run:
-go build -o doyou-api api/*.go
-./doyou-api
+# Option 1: Single command (recommended)
+npm run dev
+
+# O
+
+### Frontend Development
+```bash
+cd frontend
+npm install               # Install dependencies
+npm run dev              # Start dev server (port 5173)
+npm run build            # Build for production
+npm run preview          # Preview production build
+```ption 2: Separate terminals
+# Terminal 1:
+cd api && go run $(ls *.go | grep -v _test.go)
+# Terminal 2:
+cd frontend && npm run dev
+
+# Option 3: VS Code tasks
+# Cmd+Shift+P → Tasks: Run Task → Start All Servers
+```plicate` - Remove duplicates (body: `{"downloads_dir":"downloads", "nas_dir":"/Volumes/..."}`)
+- `POST /api/v1/util/match` - Match downloads to CSVs
+- `GET /api/v1/util/stats` - Get statistics
+- `GET /api/v1/jobs` - List all jobs
+- `GET /api/v1/jobs/:id` - Get job by ID
+- `GET /api/v1/ws` - WebSocket endpoint for real-time job updates
+
+## ~~**Add WebSocket support** for real-time progress updates~~ ✅ Completed
+2. ~~**Build React frontend** with dashboard for triggering operations~~ ✅ Completed
+3. **Music metadata extraction** using audio libraries
+4. **Docker deployment** for Raspberry Pi/CasaOS
+5. **Authentication** and user management
+6. **Browse/search tracks** UI in frontendlatest scraped CSV
+
+## Development Guidelines
+The frontend dev server runs on port 5173
+- All API operations return 202 Accepted immediately with job ID
+- Check job status with `GET /api/v1/jobs/:id` or via WebSocket
+- CSV column 5 (index 5) contains the Listen URL by default
+- NAS path: `/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks`
+- chromedp needs Chrome/Chromium installed
+- yt-dlp must be available in PATH
+- Frontend proxies `/api` requests to backend automatically
+
+## Dependencies
+
+### Backend (Go)
+```go
+github.com/gofiber/fiber/v2
+github.com/gofiber/websocket/v2
+github.com/chromedp/chromedp
+github.com/chromedp/cdproto
+github.com/google/uuid
+golang.org/x/net/html
 ```
 
-### Running Tests
-```bash
-go test ./api -v          # Run all tests
-go test ./api -cover      # With coverage
+### Frontend (npm)
+```json
+react, react-dom, axios, date-fns
+@types/react, @types/react-dom
+vite, @vitejs/plugin-react
+tailwindcss, autoprefixer, postcss
+typescript, eslint
 ```
 
-### Code Style
+Install with: `go get <package>` or `npm install
 - Use Go standard formatting (`gofmt`)
 - Handle errors explicitly (return error values)
 - Use context with timeouts for chromedp operations
