@@ -95,10 +95,7 @@ func main() {
 		for _, t := range tracks {
 			w.Write([]string{t.Title, t.Artist, t.Album, t.Label, t.ReleaseDate, t.Listen})
 		}
-		fmt.Printf("Saved %d tracks to %s\n", len(tracks), outFile)
-	}
-
-	if *year != "" {
+		fmt.Printf("Saved %d tracks to %s\n", len(tracks), csvFile)
 		y, err := strconv.Atoi(*year)
 		if err != nil || y < 1 {
 			fmt.Println("Invalid year format. Use YYYY (e.g. 2025)")

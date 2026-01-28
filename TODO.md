@@ -13,9 +13,12 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Scrape tracklists and download CSVs from doyoutrackid.com (Go)
 - [x] Download tracks from SoundCloud/YouTube/Spotify/Apple Music (Go)
 - [x] Remove duplicate tracks across local and NAS storage (Go)
-- [ ] Refactor backend as a REST API (Python FastAPI or Go Fiber)
-- [ ] Add endpoints for triggering downloads, deduplication, and metadata extraction
-- [ ] Implement job/status tracking for long-running tasks
+- [x] Create REST API server with Go Fiber
+- [x] Add API endpoints for all operations (scrape, download, deduplicate, match)
+- [x] Implement job tracking system for long-running tasks
+- [x] Wire up API endpoints to actual Go script logic (scraper.go, downloader.go, utilities.go)
+- [x] Unit tests for API (16 tests, 53.3% coverage)
+- [x] Add WebSocket support for real-time progress updates
 
 ### Frontend
 - [ ] Build a web dashboard (React or similar)

@@ -48,16 +48,16 @@ func main() {
 		}
 	}
 
-	       // Remove duplicates
-	       for _, f := range filesToRemove {
-		       err := os.Remove(f)
-		       if err != nil {
-			       fmt.Printf("Failed to remove %s: %v\n", f, err)
-		       } else {
-			       fmt.Printf("Removed duplicate: %s\n", f)
-		       }
-	       }
-	       fmt.Printf("\nRemoved %d duplicate files.\n", len(filesToRemove))
+	// Remove duplicates
+	for _, f := range filesToRemove {
+		err := os.Remove(f)
+		if err != nil {
+			fmt.Printf("Failed to remove %s: %v\n", f, err)
+		} else {
+			fmt.Printf("Removed duplicate: %s\n", f)
+		}
+	}
+	fmt.Printf("\nRemoved %d duplicate files.\n", len(filesToRemove))
 }
 
 func hashFileMD5(filePath string) ([16]byte, error) {
