@@ -393,3 +393,77 @@ func handleGetJob(c *fiber.Ctx) error {
 
 	return c.JSON(job.ToMap())
 }
+
+// Track browsing handler
+func handleGetTracks(c *fiber.Ctx) error {
+	// Parse query parameters
+	page := c.QueryInt("page", 1)
+	perPage := c.QueryInt("per_page", 50)
+	search := c.Query("search", "")
+	sortBy := c.Query("sort_by", "mod_time")
+	sortOrder := c.Query("sort_order", "desc")
+	downloadsDir := c.Query("downloads_dir", "downloads")
+	async := c.QueryBool("async", false)
+
+	// Handle relative paths - convert to absolute
+	if !filepath.IsAbs(downloadsDir) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+		}
+		downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
+	}
+
+	// Check if directory exists
+	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
+		return c.Status(404).JSON(fiber.Map{"error": fmt.Sprintf("Directory not found: %s", downloadsDir)})
+	}
+
+	result, err := GetTracks(downloadsDir, page, perPage, search, sortBy, sortOrder, async)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to list tracks: %v", err)})
+	}
+
+	return c.JSON(result)
+}
+
+// Track scan status handler
+func handleGetTracksStatus(c *fiber.Ctx) error {
+	downloadsDir := c.Query("downloads_dir", "downloads")
+
+	// Handle relative paths - convert to absolute
+	if !filepath.IsAbs(downloadsDir) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+		}
+		downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
+	}
+
+	// Check if directory exists
+	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
+		return c.Status(404).JSON(fiber.Map{"error": fmt.Sprintf("Directory not found: %s", downloadsDir)})
+	}
+
+	status := GetTrackScanStatus(downloadsDir)
+	return c.JSON(status)
+}
+
+// Serve audio file for playback
+func handleStreamTrack(c *fiber.Ctx) error {
+	filepath := c.Query("file")
+	if filepath == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "File path is required"})
+	}
+
+	// Security: Check if file exists and is within downloads directory
+	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		return c.Status(404).JSON(fiber.Map{"error": "File not found"})
+	}
+
+	// Set proper headers for audio streaming
+	c.Set("Content-Type", "audio/mpeg")
+	c.Set("Accept-Ranges", "bytes")
+
+	return c.SendFile(filepath)
+}

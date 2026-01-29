@@ -50,6 +50,11 @@ func main() {
 	utilGroup.Post("/match", handleMatchDownloads)
 	utilGroup.Get("/stats", handleStats)
 
+	// Track browsing endpoints
+	api.Get("/tracks", handleGetTracks)
+	api.Get("/tracks/stream", handleStreamTrack)
+	api.Get("/tracks/status", handleGetTracksStatus)
+
 	// Jobs endpoint
 	api.Get("/jobs", handleGetJobs)
 	api.Get("/jobs/:id", handleGetJob)
