@@ -3,6 +3,11 @@
 ## Project Overview
 This project is a Go-based web scraper for the website doyoutrackid.com. It scrapes track information for a given date, month, or year and saves the results as CSV files in the `out/` directory.
 
+## Documentation
+- [Development Guide](docs/DEVELOPMENT.md) - Local setup, Docker workflows, debugging tips
+- [Project Roadmap](docs/TODO.md) - Upcoming features and improvements
+- [API Documentation](api/README.md) - REST API endpoints and usage
+
 ## Usage
 - Run with Go: `go run main.go --date=YYYY-MM-DD` (default: today)
 - You can also use `--month=YYYY-MM` or `--year=YYYY` to scrape all days in a month or year.

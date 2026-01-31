@@ -132,7 +132,7 @@ func resolvePlayableURL(link string) (string, error) {
 }
 
 // DownloadFromCSV downloads tracks from a single CSV file
-func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, progressCallback func(current, total int)) (*DownloadResult, error) {
+func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, job *Job, progressCallback func(current, total int)) (*DownloadResult, error) {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creating output dir: %v", err)
 	}
@@ -152,6 +152,11 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, p
 	result := &DownloadResult{}
 
 	for i, rec := range records {
+		// Check if job is cancelled
+		if job != nil && job.IsCancelled() {
+			return result, fmt.Errorf("job cancelled")
+		}
+
 		if i == 0 {
 			continue // skip header
 		}
@@ -260,7 +265,7 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, p
 }
 
 // DownloadFromFolder downloads from all CSV files in a folder
-func DownloadFromFolder(folderPath string, col int, outDir string, ytdlpPath string, progressCallback func(current, total int)) (*DownloadResult, error) {
+func DownloadFromFolder(folderPath string, col int, outDir string, ytdlpPath string, job *Job, progressCallback func(current, total int)) (*DownloadResult, error) {
 	csvFiles, err := filepath.Glob(filepath.Join(folderPath, "*.csv"))
 	if err != nil || len(csvFiles) == 0 {
 		return nil, fmt.Errorf("no CSV files found in %s", folderPath)
@@ -269,13 +274,18 @@ func DownloadFromFolder(folderPath string, col int, outDir string, ytdlpPath str
 	totalResult := &DownloadResult{}
 
 	for i, csvFile := range csvFiles {
+		// Check if job is cancelled
+		if job != nil && job.IsCancelled() {
+			return totalResult, fmt.Errorf("job cancelled")
+		}
+
 		fmt.Printf("\n=== Processing %s (%d/%d) ===\n", filepath.Base(csvFile), i+1, len(csvFiles))
 
 		if progressCallback != nil {
 			progressCallback(i, len(csvFiles))
 		}
 
-		result, err := DownloadFromCSV(csvFile, col, outDir, ytdlpPath, nil)
+		result, err := DownloadFromCSV(csvFile, col, outDir, ytdlpPath, job, nil)
 		if err != nil {
 			fmt.Printf("Error processing %s: %v\n", csvFile, err)
 			continue

@@ -10,7 +10,7 @@ export const DownloadControls = () => {
     setMessage(null);
     try {
       const response = await apiService.downloadAll();
-      setMessage({ type: 'success', text: `Download started! Job ID: ${response.data.job_id}` });
+      setMessage({ type: 'success', text: `Download started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start download' });
     } finally {
@@ -23,7 +23,7 @@ export const DownloadControls = () => {
     setMessage(null);
     try {
       const response = await apiService.removeDuplicates();
-      setMessage({ type: 'success', text: `Deduplication started! Job ID: ${response.data.job_id}` });
+      setMessage({ type: 'success', text: `Deduplication started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start deduplication' });
     } finally {
@@ -36,9 +36,22 @@ export const DownloadControls = () => {
     setMessage(null);
     try {
       const response = await apiService.matchDownloads();
-      setMessage({ type: 'success', text: `Matching started! Job ID: ${response.data.job_id}` });
+      setMessage({ type: 'success', text: `Matching started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start matching' });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleMoveToNAS = async () => {
+    setLoading('move');
+    setMessage(null);
+    try {
+      const response = await apiService.moveToNAS();
+      setMessage({ type: 'success', text: `Move to NAS started! Job ID: ${response.data.job.id}` });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start move' });
     } finally {
       setLoading(null);
     }
@@ -85,6 +98,17 @@ export const DownloadControls = () => {
           <div className="flex justify-between items-center">
             <span>{loading === 'match' ? 'Matching...' : 'Match Downloads to CSVs'}</span>
             <span className="text-sm opacity-70">Find missing tracks</span>
+          </div>
+        </button>
+
+        <button
+          onClick={handleMoveToNAS}
+          disabled={!!loading}
+          className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded font-medium transition-colors text-left"
+        >
+          <div className="flex justify-between items-center">
+            <span>{loading === 'move' ? 'Moving...' : 'Move to NAS'}</span>
+            <span className="text-sm opacity-70">Transfer files to network storage</span>
           </div>
         </button>
       </div>

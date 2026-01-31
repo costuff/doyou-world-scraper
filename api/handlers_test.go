@@ -169,6 +169,11 @@ func TestDownloadFromCSVEndpoint(t *testing.T) {
 }
 
 func TestStatsEndpoint(t *testing.T) {
+	// Skip in short mode as it scans directories
+	if testing.Short() {
+		t.Skip("Skipping stats endpoint test in short mode")
+	}
+
 	app := setupTestApp()
 
 	req := httptest.NewRequest("GET", "/api/v1/util/stats", nil)

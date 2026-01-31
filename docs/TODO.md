@@ -19,6 +19,9 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Wire up API endpoints to actual Go script logic (scraper.go, downloader.go, utilities.go)
 - [x] Unit tests for API (16 tests, 53.3% coverage)
 - [x] Add WebSocket support for real-time progress updates
+- [x] Add Move to NAS utility for transferring downloads to NAS storage
+- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests
+- [ ] Document development workflow for faster iteration without Docker rebuilds
 
 ### Frontend
 - [x] Build a web dashboard (React + TypeScript + Vite + Tailwind CSS)
@@ -42,11 +45,23 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] Enable manual correction/override of metadata and genre via the frontend
 
 ### Infrastructure & Automation
-- [ ] Add Docker support for easy deployment (including ARM/Raspberry Pi compatibility)
-- [ ] Make the project deployable on Raspberry Pi/CasaOS
-- [ ] Expose the web dashboard on a configurable port for remote access to the music library
+- [x] Add Docker support for easy deployment (including ARM/Raspberry Pi compatibility)
+- [x] Make the project deployable on Raspberry Pi/CasaOS
+- [x] Expose the web dashboard on a configurable port for remote access to the music library
+- [x] GitHub Actions CI/CD with Watchtower auto-deployment
 - [ ] Set up scheduled jobs for scraping and downloads
 - [ ] Add authentication/user management for the dashboard
+
+### Development Workflow & Testing
+- [x] **Document local development setup** - Guide for running without Docker for faster iteration (see DEVELOPMENT.md)
+- [ ] **Improve test coverage** - Add unit tests for all core functions, integration tests for API endpoints
+- [ ] Add test fixtures and mock data for reliable testing
+- [ ] Set up pre-commit hooks for linting and testing
+- [ ] **Improve GitHub Actions workflow**:
+  - [ ] Protect `develop` branch - no direct pushes, only via PRs
+  - [ ] Build Docker images only on PR merge to `develop` or `main`, not on every push
+  - [ ] Add CI checks on PRs (tests, linting) before allowing merge
+  - [ ] Consider separate staging/production workflows
 
 ---
 Feel free to add, edit, or check off items as the project evolves!

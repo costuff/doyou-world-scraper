@@ -1,7 +1,7 @@
 export interface Job {
   id: string;
   type: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   created_at: string;
   updated_at: string;

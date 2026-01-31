@@ -24,7 +24,7 @@ type DeduplicateResult struct {
 }
 
 // RemoveDuplicates scans directories and removes duplicate MP3 files by MD5 hash
-func RemoveDuplicates(downloadsDir, nasDir string) (*DeduplicateResult, error) {
+func RemoveDuplicates(downloadsDir, nasDir string, job *Job, progressCallback func(current, total int)) (*DeduplicateResult, error) {
 	result := &DeduplicateResult{}
 	fileHashes := make(map[[16]byte]string)
 	var filesToRemove []string
@@ -36,13 +36,40 @@ func RemoveDuplicates(downloadsDir, nasDir string) (*DeduplicateResult, error) {
 		}
 	}
 
+	// First pass: count total files for progress reporting
+	totalFiles := 0
+	for _, dir := range scanDirs {
+		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() && filepath.Ext(info.Name()) == ".mp3" {
+				totalFiles++
+			}
+			return nil
+		})
+	}
+
+	if progressCallback != nil && totalFiles > 0 {
+		progressCallback(0, totalFiles)
+	}
+
+	// Second pass: scan and hash files
 	for _, dir := range scanDirs {
 		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			// Check if job is cancelled
+			if job != nil && job.IsCancelled() {
+				return fmt.Errorf("job cancelled")
+			}
+
 			if err != nil {
 				return nil
 			}
 			if !info.IsDir() && filepath.Ext(info.Name()) == ".mp3" {
 				result.TotalScanned++
+
+				// Report progress every 10 files
+				if progressCallback != nil && totalFiles > 0 && result.TotalScanned%10 == 0 {
+					progressCallback(result.TotalScanned, totalFiles)
+				}
+
 				hash, err := hashFileMD5(path)
 				if err != nil {
 					result.Errors = append(result.Errors, fmt.Sprintf("Error hashing %s: %v", path, err))
@@ -61,6 +88,11 @@ func RemoveDuplicates(downloadsDir, nasDir string) (*DeduplicateResult, error) {
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("Error walking %s: %v", dir, err))
 		}
+	}
+
+	// Report completion of scan phase
+	if progressCallback != nil && totalFiles > 0 {
+		progressCallback(totalFiles, totalFiles)
 	}
 
 	// Remove duplicates
@@ -309,11 +341,11 @@ type TrackListResult struct {
 }
 
 type TrackScanStatus struct {
-	InProgress bool   `json:"in_progress"`
-	Scanned    int    `json:"scanned"`
-	Total      int    `json:"total"`
+	InProgress  bool   `json:"in_progress"`
+	Scanned     int    `json:"scanned"`
+	Total       int    `json:"total"`
 	LastUpdated string `json:"last_updated"`
-	Error      string `json:"error,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 type trackCacheEntry struct {
@@ -385,9 +417,9 @@ func setCachedTracks(dir string, tracks []TrackInfo) {
 
 func scanAllTracks(downloadsDir string) ([]TrackInfo, error) {
 	setTrackScanStatus(downloadsDir, TrackScanStatus{
-		InProgress: true,
-		Scanned:    0,
-		Total:      0,
+		InProgress:  true,
+		Scanned:     0,
+		Total:       0,
 		LastUpdated: time.Now().Format(time.RFC3339),
 	})
 
@@ -470,6 +502,11 @@ func GetTracks(downloadsDir string, page, perPage int, search, sortBy, sortOrder
 	}
 	if perPage < 1 || perPage > 100 {
 		perPage = 50
+	}
+
+	// Normalize path to absolute for consistent cache keys
+	if absPath, err := filepath.Abs(downloadsDir); err == nil {
+		downloadsDir = absPath
 	}
 
 	var allTracks []TrackInfo
@@ -582,4 +619,122 @@ func readID3Tags(file *os.File) (*Metadata, error) {
 		Year:   m.Year(),
 		Genre:  m.Genre(),
 	}, nil
+}
+
+// MoveToNASResult represents the result of moving files to NAS
+type MoveToNASResult struct {
+	TotalFiles   int      `json:"total_files"`
+	MovedFiles   int      `json:"moved_files"`
+	SkippedFiles int      `json:"skipped_files"`
+	FailedFiles  int      `json:"failed_files"`
+	Errors       []string `json:"errors"`
+}
+
+// MoveDownloadsToNAS moves MP3 files from downloads directory to NAS
+func MoveDownloadsToNAS(downloadsDir, nasDir string, job *Job, progressCallback func(current, total int)) (*MoveToNASResult, error) {
+	result := &MoveToNASResult{}
+
+	// Check if directories exist
+	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("downloads directory does not exist: %s", downloadsDir)
+	}
+	if _, err := os.Stat(nasDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("NAS directory does not exist: %s", nasDir)
+	}
+
+	// Get list of MP3 files in downloads
+	var files []string
+	err := filepath.Walk(downloadsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
+			// Skip hidden files
+			if strings.HasPrefix(info.Name(), ".") || strings.HasPrefix(info.Name(), "._") {
+				return nil
+			}
+			// Skip small files
+			if info.Size() < minTrackSizeBytes {
+				return nil
+			}
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error scanning downloads directory: %v", err)
+	}
+
+	result.TotalFiles = len(files)
+
+	// Move each file
+	for i, srcPath := range files {
+		// Check if job is cancelled
+		if job != nil && job.IsCancelled() {
+			return result, fmt.Errorf("job cancelled")
+		}
+
+		if progressCallback != nil {
+			progressCallback(i+1, result.TotalFiles)
+		}
+
+		filename := filepath.Base(srcPath)
+		dstPath := filepath.Join(nasDir, filename)
+
+		// Check if file already exists on NAS
+		if _, err := os.Stat(dstPath); err == nil {
+			result.SkippedFiles++
+			continue
+		}
+
+		// Copy file to NAS
+		if err := copyFile(srcPath, dstPath); err != nil {
+			result.FailedFiles++
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to copy %s: %v", filename, err))
+			continue
+		}
+
+		// Verify file was copied successfully
+		srcInfo, _ := os.Stat(srcPath)
+		dstInfo, err := os.Stat(dstPath)
+		if err != nil || srcInfo.Size() != dstInfo.Size() {
+			result.FailedFiles++
+			result.Errors = append(result.Errors, fmt.Sprintf("Verification failed for %s", filename))
+			os.Remove(dstPath) // Clean up failed copy
+			continue
+		}
+
+		// Delete original file
+		if err := os.Remove(srcPath); err != nil {
+			result.FailedFiles++
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to delete %s: %v", filename, err))
+			continue
+		}
+
+		result.MovedFiles++
+	}
+
+	return result, nil
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	return destFile.Sync()
 }

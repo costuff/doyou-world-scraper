@@ -74,7 +74,7 @@ func handleScrapeMonth(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		days, tracks, err := ScrapeMonth(req.Month, func(current, total int) {
+		days, tracks, err := ScrapeMonth(req.Month, job, func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
 		})
@@ -113,7 +113,7 @@ func handleScrapeYear(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		days, tracks, err := ScrapeYear(req.Year, func(current, total int) {
+		days, tracks, err := ScrapeYear(req.Year, job, func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
 		})
@@ -163,7 +163,7 @@ func handleDownloadFromCSV(c *fiber.Ctx) error {
 		if filepath.IsAbs("downloads") || fileExists("/app/downloads") {
 			downloadsDir = "/app/downloads"
 		}
-		result, err := DownloadFromCSV(req.CSVPath, req.Column, downloadsDir, "yt-dlp", func(current, total int) {
+		result, err := DownloadFromCSV(req.CSVPath, req.Column, downloadsDir, "yt-dlp", job, func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
 		})
@@ -185,18 +185,19 @@ func handleDownloadFromCSV(c *fiber.Ctx) error {
 }
 
 func handleDownloadAll(c *fiber.Ctx) error {
+	csvDir := "./csv"
+	downloadsDir := "./downloads"
+	if fileExists("/app/csv") {
+		csvDir = "/app/csv"
+		downloadsDir = "/app/downloads"
+	}
+
 	job := NewJob("download_all", fiber.Map{
-		"folder": "../csv/",
+		"folder": csvDir,
 	})
 
 	go func() {
-		csvDir := "./csv"
-		downloadsDir := "./downloads"
-		if fileExists("/app/csv") {
-			csvDir = "/app/csv"
-			downloadsDir = "/app/downloads"
-		}
-		result, err := DownloadFromFolder(csvDir, 5, downloadsDir, "yt-dlp", func(current, total int) {
+		result, err := DownloadFromFolder(csvDir, 5, downloadsDir, "yt-dlp", job, func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
 		})
@@ -252,7 +253,10 @@ func handleDeduplicate(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		result, err := RemoveDuplicates(downloadsDir, nasDir)
+		result, err := RemoveDuplicates(downloadsDir, nasDir, job, func(current, total int) {
+			progress := int((float64(current) / float64(total)) * 100)
+			job.UpdateProgress(progress)
+		})
 		if err != nil {
 			job.Fail(fmt.Sprintf("Deduplication failed: %v", err))
 			return
@@ -267,6 +271,64 @@ func handleDeduplicate(c *fiber.Ctx) error {
 
 	return c.Status(202).JSON(fiber.Map{
 		"message": "Deduplication started",
+		"job":     job.ToMap(),
+	})
+}
+
+func handleMoveToNAS(c *fiber.Ctx) error {
+	type Request struct {
+		DownloadsDir string `json:"downloads_dir"`
+		NASDir       string `json:"nas_dir"`
+	}
+
+	req := new(Request)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	downloadsDir := req.DownloadsDir
+	if downloadsDir == "" {
+		if fileExists("/app/downloads") {
+			downloadsDir = "/app/downloads"
+		} else {
+			downloadsDir = "./downloads"
+		}
+	}
+
+	nasDir := req.NASDir
+	if nasDir == "" {
+		if fileExists("/nas") {
+			nasDir = "/nas"
+		} else {
+			nasDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+		}
+	}
+
+	job := NewJob("move_to_nas", fiber.Map{
+		"downloads_dir": downloadsDir,
+		"nas_dir":       nasDir,
+	})
+
+	go func() {
+		result, err := MoveDownloadsToNAS(downloadsDir, nasDir, job, func(current, total int) {
+			progress := int((float64(current) / float64(total)) * 100)
+			job.UpdateProgress(progress)
+		})
+		if err != nil {
+			job.Fail(fmt.Sprintf("Move to NAS failed: %v", err))
+			return
+		}
+		job.Complete(fiber.Map{
+			"total_files":   result.TotalFiles,
+			"moved_files":   result.MovedFiles,
+			"skipped_files": result.SkippedFiles,
+			"failed_files":  result.FailedFiles,
+			"errors":        result.Errors,
+		})
+	}()
+
+	return c.Status(202).JSON(fiber.Map{
+		"message": "Moving files to NAS",
 		"job":     job.ToMap(),
 	})
 }
@@ -434,6 +496,19 @@ func handleGetJob(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(job.ToMap())
+}
+
+func handleCancelJob(c *fiber.Ctx) error {
+	id := c.Params("id")
+
+	if err := CancelJob(id); err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Job cancelled successfully",
+		"job_id":  id,
+	})
 }
 
 // Track browsing handler

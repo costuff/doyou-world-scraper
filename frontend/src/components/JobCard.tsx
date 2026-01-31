@@ -1,22 +1,43 @@
 import { format } from 'date-fns';
 import type { Job } from '../types';
+import { apiService } from '../services/api';
+import { useState } from 'react';
 
 interface JobCardProps {
   job: Job;
 }
 
 export const JobCard = ({ job }: JobCardProps) => {
+  const [cancelling, setCancelling] = useState(false);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'bg-green-500';
       case 'running': return 'bg-blue-500';
       case 'failed': return 'bg-red-500';
+      case 'cancelled': return 'bg-yellow-500';
       default: return 'bg-gray-500';
     }
   };
 
   const getStatusText = (status: string) => {
     return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  const handleCancel = async () => {
+    if (!confirm('Are you sure you want to cancel this job?')) {
+      return;
+    }
+    
+    setCancelling(true);
+    try {
+      await apiService.cancelJob(job.id);
+    } catch (error) {
+      console.error('Failed to cancel job:', error);
+      alert('Failed to cancel job');
+    } finally {
+      setCancelling(false);
+    }
   };
 
   return (
@@ -28,9 +49,20 @@ export const JobCard = ({ job }: JobCardProps) => {
             {format(new Date(job.created_at), 'MMM d, yyyy HH:mm:ss')}
           </p>
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)} text-white`}>
-          {getStatusText(job.status)}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)} text-white`}>
+            {getStatusText(job.status)}
+          </span>
+          {job.status === 'running' && (
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 disabled:bg-red-800 text-white text-xs font-medium rounded transition"
+            >
+              {cancelling ? 'Cancelling...' : 'Cancel'}
+            </button>
+          )}
+        </div>
       </div>
 
       {job.status === 'running' && (

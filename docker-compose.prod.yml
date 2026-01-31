@@ -1,0 +1,44 @@
+services:
+  api:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-costuff}/doyou-world-scraper-api:latest
+    container_name: doyou-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      - ./csv:/app/csv
+      - ./downloads:/app/downloads
+      - ${NAS_PATH:-/mnt/music}:/nas:ro
+    environment:
+      - PORT=3000
+      - TZ=${TZ:-Europe/Athens}
+    networks:
+      - doyou-network    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-costuff}/doyou-world-scraper-frontend:latest
+    container_name: doyou-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api
+    networks:
+      - doyou-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  doyou-network:
+    driver: bridge

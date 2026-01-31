@@ -75,7 +75,10 @@ func ScrapeSingleDate(dateStr string) (int, error) {
 	}
 
 	// Write to CSV in csv/tracks-[date].csv
-	csvDir := filepath.Join("..", "csv")
+	csvDir := "./csv"
+	if fileExists("/app/csv") {
+		csvDir = "/app/csv"
+	}
 	if err := os.MkdirAll(csvDir, 0755); err != nil {
 		return 0, fmt.Errorf("error creating csv directory: %v", err)
 	}
@@ -97,7 +100,7 @@ func ScrapeSingleDate(dateStr string) (int, error) {
 }
 
 // ScrapeMonth scrapes all days in a given month (YYYY-MM format)
-func ScrapeMonth(monthStr string, progressCallback func(current, total int)) (int, int, error) {
+func ScrapeMonth(monthStr string, job *Job, progressCallback func(current, total int)) (int, int, error) {
 	t, err := time.Parse("2006-01", monthStr)
 	if err != nil {
 		return 0, 0, fmt.Errorf("invalid month format (use YYYY-MM): %v", err)
@@ -119,6 +122,11 @@ func ScrapeMonth(monthStr string, progressCallback func(current, total int)) (in
 	totalTracks := 0
 
 	for day := 1; day <= 31; day++ {
+		// Check if job is cancelled
+		if job != nil && job.IsCancelled() {
+			return totalDays, totalTracks, fmt.Errorf("job cancelled")
+		}
+
 		d := time.Date(year, mon, day, 0, 0, 0, 0, time.UTC)
 		if d.Month() != mon || d.After(today) {
 			break
@@ -142,7 +150,7 @@ func ScrapeMonth(monthStr string, progressCallback func(current, total int)) (in
 }
 
 // ScrapeYear scrapes all days in a given year (YYYY format)
-func ScrapeYear(yearStr string, progressCallback func(current, total int)) (int, int, error) {
+func ScrapeYear(yearStr string, job *Job, progressCallback func(current, total int)) (int, int, error) {
 	y, err := strconv.Atoi(yearStr)
 	if err != nil || y < 1 {
 		return 0, 0, fmt.Errorf("invalid year format (use YYYY): %v", err)
@@ -168,6 +176,11 @@ func ScrapeYear(yearStr string, progressCallback func(current, total int)) (int,
 	totalTracks := 0
 
 	for m := 1; m <= 12; m++ {
+		// Check if job is cancelled
+		if job != nil && job.IsCancelled() {
+			return totalDays, totalTracks, fmt.Errorf("job cancelled")
+		}
+
 		t := time.Date(y, time.Month(m), 1, 0, 0, 0, 0, time.UTC)
 		mon := t.Month()
 		for day := 1; day <= 31; day++ {

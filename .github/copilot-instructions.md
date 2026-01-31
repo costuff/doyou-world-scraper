@@ -153,7 +153,55 @@ cd frontend && npm run dev
 6. **Browse/search tracks** UI in frontendlatest scraped CSV
 
 ## Development Guidelines
-The frontend dev server runs on port 5173
+
+### Running Both Servers
+```bash
+# Option 1: Single command (recommended)
+npm run dev
+
+# Option 2: Separate terminals
+# Terminal 1:
+cd api && go run $(ls *.go | grep -v _test.go)
+# Terminal 2:
+cd frontend && npm run dev
+
+# Option 3: VS Code tasks
+# Cmd+Shift+P → Tasks: Run Task → Start All Servers
+```
+
+### Testing Requirements
+**IMPORTANT**: This project prioritizes test coverage and maintainability.
+
+**Test Coverage Goals:**
+- Maintain **80%+ test coverage** for all Go code
+- Write tests for **every new function** before committing
+- Update existing tests when modifying functionality
+- Run tests before every commit: `cd api && go test -v ./...`
+
+**Testing Standards:**
+- Unit tests: Test individual functions in isolation
+- Integration tests: Test API endpoints end-to-end
+- Use table-driven tests for multiple scenarios
+- Mock external dependencies (network calls, file system when appropriate)
+- Use `t.TempDir()` for file system tests
+- Add `t.Skip()` for tests that require network/external resources
+
+**Test Files Location:**
+- `api/*_test.go` - Go test files (handlers_test.go, jobs_test.go, utilities_test.go, etc.)
+- Run: `cd api && go test -v ./...`
+- Coverage: `cd api && go test -cover ./...`
+
+**When Adding Features:**
+1. Write tests first (TDD approach preferred)
+2. Implement feature
+3. Ensure tests pass
+4. Check coverage: `go test -cover`
+5. Commit with meaningful message
+
+**Documentation:**
+- Keep `docs/TODO.md` updated with task status
+- Update `docs/DEVELOPMENT.md` when changing dev workflow
+- Update API documentation in `api/README.md` for new endpoints
 - All API operations return 202 Accepted immediately with job ID
 - Check job status with `GET /api/v1/jobs/:id` or via WebSocket
 - CSV column 5 (index 5) contains the Listen URL by default

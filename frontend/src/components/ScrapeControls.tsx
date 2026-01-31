@@ -14,7 +14,7 @@ export const ScrapeControls = () => {
     setMessage(null);
     try {
       const response = await apiService.scrapeDate(date);
-      setMessage({ type: 'success', text: `Scraping started! Job ID: ${response.data.job_id}` });
+      setMessage({ type: 'success', text: `Scraping started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start scraping' });
     } finally {
@@ -27,7 +27,7 @@ export const ScrapeControls = () => {
     setMessage(null);
     try {
       const response = await apiService.scrapeMonth(month);
-      setMessage({ type: 'success', text: `Scraping started! Job ID: ${response.data.job_id}` });
+      setMessage({ type: 'success', text: `Scraping started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start scraping' });
     } finally {
@@ -40,7 +40,7 @@ export const ScrapeControls = () => {
     setMessage(null);
     try {
       const response = await apiService.scrapeYear(year);
-      setMessage({ type: 'success', text: `Scraping started! Job ID: ${response.data.job_id}` });
+      setMessage({ type: 'success', text: `Scraping started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start scraping' });
     } finally {

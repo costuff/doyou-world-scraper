@@ -16,27 +16,30 @@ export const apiService = {
 
   // Scraping
   scrapeDate: (date: string) => 
-    api.post<{ job_id: string }>('/scrape/date', { date }),
+    api.post<{ message: string; job: Job }>('/scrape/date', { date }),
   
   scrapeMonth: (month: string) => 
-    api.post<{ job_id: string }>('/scrape/month', { month }),
+    api.post<{ message: string; job: Job }>('/scrape/month', { month }),
   
   scrapeYear: (year: string) => 
-    api.post<{ job_id: string }>('/scrape/year', { year }),
+    api.post<{ message: string; job: Job }>('/scrape/year', { year }),
 
   // Downloading
   downloadFromCSV: (csvPath: string) =>
-    api.post<{ job_id: string }>('/download/csv', { csv_path: csvPath }),
+    api.post<{ message: string; job: Job }>('/download/csv', { csv_path: csvPath }),
   
   downloadAll: () =>
-    api.post<{ job_id: string }>('/download/all'),
+    api.post<{ message: string; job: Job }>('/download/all'),
 
   // Utilities
   removeDuplicates: () =>
-    api.post<{ job_id: string }>('/util/deduplicate'),
+    api.post<{ message: string; job: Job }>('/util/deduplicate', {}),
+  
+  moveToNAS: () =>
+    api.post<{ message: string; job: Job }>('/util/move-to-nas', {}),
   
   matchDownloads: () =>
-    api.post<{ job_id: string }>('/util/match'),
+    api.post<{ message: string; job: Job }>('/util/match', {}),
   
   getStats: () =>
     api.get<Stats>('/util/stats'),
@@ -46,7 +49,10 @@ export const apiService = {
     api.get<Job>(`/jobs/${jobId}`),
   
   getAllJobs: () =>
-    api.get<Job[]>('/jobs'),
+    api.get<{ jobs: Job[]; total: number }>('/jobs'),
+
+  cancelJob: (jobId: string) =>
+    api.post<{ message: string; job_id: string }>(`/jobs/${jobId}/cancel`, {}),
 
   // Tracks
   getTracks: (params: {

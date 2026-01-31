@@ -47,6 +47,7 @@ func main() {
 	// Utility endpoints
 	utilGroup := api.Group("/util")
 	utilGroup.Post("/deduplicate", handleDeduplicate)
+	utilGroup.Post("/move-to-nas", handleMoveToNAS)
 	utilGroup.Post("/match", handleMatchDownloads)
 	utilGroup.Get("/stats", handleStats)
 
@@ -58,6 +59,7 @@ func main() {
 	// Jobs endpoint
 	api.Get("/jobs", handleGetJobs)
 	api.Get("/jobs/:id", handleGetJob)
+	api.Post("/jobs/:id/cancel", handleCancelJob)
 
 	// WebSocket endpoint
 	api.Get("/ws", websocket.New(HandleWebSocket))

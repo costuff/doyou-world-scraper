@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Job, WSMessage } from '../types';
+import { apiService } from '../services/api';
 
 const WS_URL = 'ws://localhost:3000/api/v1/ws';
 
@@ -9,6 +10,23 @@ export const useWebSocket = () => {
   const ws = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<number>();
 
+  // Fetch existing jobs on connect
+  const fetchJobs = useCallback(async () => {
+    try {
+      const response = await apiService.getAllJobs();
+      const jobsMap: Record<string, Job> = {};
+      // API returns { jobs: Job[], total: number }
+      if (response.data && Array.isArray(response.data.jobs)) {
+        response.data.jobs.forEach((job: Job) => {
+          jobsMap[job.id] = job;
+        });
+        setJobs(jobsMap);
+      }
+    } catch (error) {
+      console.error('Failed to fetch jobs:', error);
+    }
+  }, []);
+
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
@@ -17,6 +35,8 @@ export const useWebSocket = () => {
     ws.current.onopen = () => {
       console.log('WebSocket connected');
       setIsConnected(true);
+      // Fetch existing jobs when WebSocket connects
+      fetchJobs();
     };
 
     ws.current.onmessage = (event) => {

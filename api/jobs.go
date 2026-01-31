@@ -15,21 +15,23 @@ const (
 	StatusRunning   JobStatus = "running"
 	StatusCompleted JobStatus = "completed"
 	StatusFailed    JobStatus = "failed"
+	StatusCancelled JobStatus = "cancelled"
 )
 
 type Job struct {
-	ID        string     `json:"id"`
-	Type      string     `json:"type"`
-	Status    JobStatus  `json:"status"`
-	Progress  int        `json:"progress"` // 0-100
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	StartedAt *time.Time `json:"started_at,omitempty"`
-	EndedAt   *time.Time `json:"ended_at,omitempty"`
-	Input     fiber.Map  `json:"input"`
-	Result    fiber.Map  `json:"result,omitempty"`
-	Error     string     `json:"error,omitempty"`
-	mu        sync.RWMutex
+	ID         string     `json:"id"`
+	Type       string     `json:"type"`
+	Status     JobStatus  `json:"status"`
+	Progress   int        `json:"progress"` // 0-100
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	StartedAt  *time.Time `json:"started_at,omitempty"`
+	EndedAt    *time.Time `json:"ended_at,omitempty"`
+	Input      fiber.Map  `json:"input"`
+	Result     fiber.Map  `json:"result,omitempty"`
+	Error      string     `json:"error,omitempty"`
+	mu         sync.RWMutex
+	cancelChan chan struct{} `json:"-"` // Channel to signal cancellation
 }
 
 var (
@@ -39,13 +41,14 @@ var (
 
 func NewJob(jobType string, input fiber.Map) *Job {
 	job := &Job{
-		ID:        uuid.New().String(),
-		Type:      jobType,
-		Status:    StatusPending,
-		Progress:  0,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		Input:     input,
+		ID:         uuid.New().String(),
+		Type:       jobType,
+		Status:     StatusPending,
+		Progress:   0,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Input:      input,
+		cancelChan: make(chan struct{}),
 	}
 
 	jobsMu.Lock()
@@ -103,6 +106,35 @@ func (j *Job) Fail(errorMsg string) {
 	BroadcastJobUpdate(j)
 }
 
+func (j *Job) Cancel() {
+	j.mu.Lock()
+	if j.Status != StatusRunning {
+		j.mu.Unlock()
+		return
+	}
+	now := time.Now()
+	j.Status = StatusCancelled
+	j.Error = "Job cancelled by user"
+	j.EndedAt = &now
+	j.UpdatedAt = now
+	j.mu.Unlock()
+
+	// Signal cancellation
+	close(j.cancelChan)
+
+	// Broadcast cancellation via WebSocket
+	BroadcastJobUpdate(j)
+}
+
+func (j *Job) IsCancelled() bool {
+	select {
+	case <-j.cancelChan:
+		return true
+	default:
+		return false
+	}
+}
+
 func (j *Job) ToMap() fiber.Map {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
@@ -137,6 +169,15 @@ func GetAllJobs() []fiber.Map {
 		result = append(result, job.ToMap())
 	}
 	return result
+}
+
+func CancelJob(id string) error {
+	job := GetJob(id)
+	if job == nil {
+		return fiber.NewError(404, "Job not found")
+	}
+	job.Cancel()
+	return nil
 }
 
 // CleanupOldJobs removes completed/failed jobs older than 24 hours
