@@ -11,6 +11,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// Helper function to check if a file/directory exists
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 // Scrape handlers
 func handleScrapeDate(c *fiber.Ctx) error {
 	type Request struct {
@@ -153,7 +159,11 @@ func handleDownloadFromCSV(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		result, err := DownloadFromCSV(req.CSVPath, req.Column, "../downloads", "yt-dlp", func(current, total int) {
+		downloadsDir := "./downloads"
+		if filepath.IsAbs("downloads") || fileExists("/app/downloads") {
+			downloadsDir = "/app/downloads"
+		}
+		result, err := DownloadFromCSV(req.CSVPath, req.Column, downloadsDir, "yt-dlp", func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
 		})
@@ -180,7 +190,13 @@ func handleDownloadAll(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		result, err := DownloadFromFolder("../csv", 5, "../downloads", "yt-dlp", func(current, total int) {
+		csvDir := "./csv"
+		downloadsDir := "./downloads"
+		if fileExists("/app/csv") {
+			csvDir = "/app/csv"
+			downloadsDir = "/app/downloads"
+		}
+		result, err := DownloadFromFolder(csvDir, 5, downloadsDir, "yt-dlp", func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
 		})
@@ -215,11 +231,19 @@ func handleDeduplicate(c *fiber.Ctx) error {
 
 	downloadsDir := req.DownloadsDir
 	if downloadsDir == "" {
-		downloadsDir = "../downloads"
+		if fileExists("/app/downloads") {
+			downloadsDir = "/app/downloads"
+		} else {
+			downloadsDir = "./downloads"
+		}
 	}
 	nasDir := req.NASDir
 	if nasDir == "" {
-		nasDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+		if fileExists("/nas") {
+			nasDir = "/nas"
+		} else {
+			nasDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+		}
 	}
 
 	job := NewJob("deduplicate", fiber.Map{
@@ -251,7 +275,13 @@ func handleMatchDownloads(c *fiber.Ctx) error {
 	job := NewJob("match_downloads", fiber.Map{})
 
 	go func() {
-		result, err := MatchDownloadsToCSVs("../csv", "../downloads")
+		csvDir := "./csv"
+		downloadsDir := "./downloads"
+		if fileExists("/app/csv") {
+			csvDir = "/app/csv"
+			downloadsDir = "/app/downloads"
+		}
+		result, err := MatchDownloadsToCSVs(csvDir, downloadsDir)
 		if err != nil {
 			job.Fail(fmt.Sprintf("Matching failed: %v", err))
 			return
@@ -287,7 +317,11 @@ func handleStats(c *fiber.Ctx) error {
 	}
 
 	// Count CSV files (fast)
-	csvFiles, err := filepath.Glob("../csv/*.csv")
+	csvDir := "./csv"
+	if fileExists("/app/csv") {
+		csvDir = "/app/csv"
+	}
+	csvFiles, err := filepath.Glob(filepath.Join(csvDir, "*.csv"))
 	if err == nil {
 		stats["total_csvs"] = len(csvFiles)
 
@@ -331,7 +365,11 @@ func handleStats(c *fiber.Ctx) error {
 	go func() {
 		var totalMP3s int
 		var downloadsDirSize int64
-		filepath.Walk("../downloads", func(path string, info os.FileInfo, err error) error {
+		downloadsDir := "./downloads"
+		if fileExists("/app/downloads") {
+			downloadsDir = "/app/downloads"
+		}
+		filepath.Walk(downloadsDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
 				totalMP3s++
 				downloadsDirSize += info.Size()
@@ -347,7 +385,11 @@ func handleStats(c *fiber.Ctx) error {
 	go func() {
 		var nasMP3s int
 		var nasDirSize int64
-		filepath.Walk("/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks", func(path string, info os.FileInfo, err error) error {
+		nasDir := "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+		if fileExists("/nas") {
+			nasDir = "/nas"
+		}
+		filepath.Walk(nasDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
 				nasMP3s++
 				nasDirSize += info.Size()
@@ -407,11 +449,21 @@ func handleGetTracks(c *fiber.Ctx) error {
 
 	// Handle relative paths - convert to absolute
 	if !filepath.IsAbs(downloadsDir) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+		// Check if we're in Docker first
+		if fileExists("/app/downloads") {
+			if downloadsDir == "downloads" {
+				downloadsDir = "/app/downloads"
+			} else if downloadsDir == "nas" {
+				downloadsDir = "/nas"
+			}
+		} else {
+			// Local development - use relative path from project root
+			cwd, err := os.Getwd()
+			if err != nil {
+				return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+			}
+			downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
 		}
-		downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
 	}
 
 	// Check if directory exists
@@ -433,11 +485,21 @@ func handleGetTracksStatus(c *fiber.Ctx) error {
 
 	// Handle relative paths - convert to absolute
 	if !filepath.IsAbs(downloadsDir) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+		// Check if we're in Docker first
+		if fileExists("/app/downloads") {
+			if downloadsDir == "downloads" {
+				downloadsDir = "/app/downloads"
+			} else if downloadsDir == "nas" {
+				downloadsDir = "/nas"
+			}
+		} else {
+			// Local development - use relative path from project root
+			cwd, err := os.Getwd()
+			if err != nil {
+				return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+			}
+			downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
 		}
-		downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
 	}
 
 	// Check if directory exists

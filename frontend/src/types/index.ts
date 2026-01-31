@@ -34,3 +34,34 @@ export interface WSMessage {
   type: string;
   data?: any;
 }
+
+export interface TrackInfo {
+  filename: string;
+  title: string;
+  artist: string;
+  album: string;
+  year: number;
+  genre: string;
+  duration: number; // in seconds
+  file_size: number; // in bytes
+  file_path: string;
+  mod_time: string;
+}
+
+export interface TrackListResult {
+  tracks: TrackInfo[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+  in_progress?: boolean;
+  scanned?: number;
+}
+
+export interface TrackScanStatus {
+  in_progress: boolean;
+  scanned: number;
+  total: number;
+  last_updated: string;
+  error?: string;
+}

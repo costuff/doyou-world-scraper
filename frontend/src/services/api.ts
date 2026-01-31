@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Job, Stats, ScrapeRequest, DownloadRequest } from '../types';
+import type { Job, Stats, TrackListResult, TrackScanStatus } from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -47,6 +47,24 @@ export const apiService = {
   
   getAllJobs: () =>
     api.get<Job[]>('/jobs'),
+
+  // Tracks
+  getTracks: (params: {
+    page?: number;
+    per_page?: number;
+    search?: string;
+    sort_by?: string;
+    sort_order?: string;
+    downloads_dir?: string;
+    async?: boolean;
+  }) =>
+    api.get<TrackListResult>('/tracks', { params }),
+
+  getTrackScanStatus: (params: { downloads_dir?: string }) =>
+    api.get<TrackScanStatus>('/tracks/status', { params }),
+  
+  getStreamUrl: (filePath: string) =>
+    `${API_BASE}/tracks/stream?file=${encodeURIComponent(filePath)}`,
 };
 
 export default apiService;

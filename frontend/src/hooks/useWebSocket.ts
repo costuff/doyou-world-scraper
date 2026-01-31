@@ -7,7 +7,7 @@ export const useWebSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [jobs, setJobs] = useState<Record<string, Job>>({});
   const ws = useRef<WebSocket | null>(null);
-  const reconnectTimeout = useRef<NodeJS.Timeout>();
+  const reconnectTimeout = useRef<number>();
 
   const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return;

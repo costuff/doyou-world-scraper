@@ -1,13 +1,37 @@
-# Ignore all files in out and downloads folders
+# Data directories
 /csv/*
 /downloads/*
+!/csv/.gitkeep
+!/downloads/.gitkeep
 
-# But keep the folders themselves
-!/csv/
-!/downloads/
-
-# Optionally, keep a .gitkeep file if you want the folders to always exist
-/csv/.gitkeep
-/downloads/.gitkeep
+# Logs
+*.log
 api.log
-node_modules
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+._*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build outputs
+dist/
+build/
+*.local
+
+# Docker
+docker-compose.override.yml

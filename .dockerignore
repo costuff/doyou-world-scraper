@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+README.md
+TODO.md
+*.md
+
+# Development
+.vscode
+.idea
+*.log
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+build
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*_test.go
+**/*_test.go
+test
+tests
+
+# Data directories
+downloads
+csv
+*.csv
+
+# Environment
+.env
+.env.*
+!.env.example
