@@ -41,6 +41,9 @@ export const apiService = {
   matchDownloads: () =>
     api.post<{ message: string; job: Job }>('/util/match', {}),
   
+  clearCSVs: () =>
+    api.post<{ message: string; job: Job }>('/util/clear-csvs', {}),
+  
   getStats: () =>
     api.get<Stats>('/util/stats'),
 

@@ -34,6 +34,7 @@ func setupTestApp() *fiber.App {
 	utilGroup := api.Group("/util")
 	utilGroup.Post("/deduplicate", handleDeduplicate)
 	utilGroup.Post("/match", handleMatchDownloads)
+	utilGroup.Post("/clear-csvs", handleClearCSVs)
 	utilGroup.Get("/stats", handleStats)
 
 	api.Get("/jobs", handleGetJobs)
@@ -169,15 +170,10 @@ func TestDownloadFromCSVEndpoint(t *testing.T) {
 }
 
 func TestStatsEndpoint(t *testing.T) {
-	// Skip in short mode as it scans directories
-	if testing.Short() {
-		t.Skip("Skipping stats endpoint test in short mode")
-	}
-
 	app := setupTestApp()
 
 	req := httptest.NewRequest("GET", "/api/v1/util/stats", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, 5000) // 5 second timeout
 
 	if err != nil {
 		t.Fatalf("Error testing stats endpoint: %v", err)
@@ -193,16 +189,18 @@ func TestStatsEndpoint(t *testing.T) {
 
 	// Check that stats contains expected fields
 	expectedFields := []string{
-		"total_csv_files",
+		"total_csvs",
+		"total_tracks_scraped",
 		"total_downloads",
-		"downloads_dir_size_mb",
-		"nas_dir_size_mb",
-		"last_scrape",
-		"last_download",
+		"downloads_size_gb",
+		"nas_downloads",
+		"nas_size_gb",
+		"earliest_date",
+		"latest_date",
 	}
 
 	for _, field := range expectedFields {
-		if _, ok := result[field]; !ok {
+		if _, exists := result[field]; !exists {
 			t.Errorf("Stats should include '%s' field", field)
 		}
 	}
@@ -293,5 +291,191 @@ func TestGetJobByIDNotFound(t *testing.T) {
 
 	if result["error"] != "Job not found" {
 		t.Error("Should return 'Job not found' error")
+	}
+}
+
+func TestClearCSVsEndpoint(t *testing.T) {
+	app := setupTestApp()
+
+	req := httptest.NewRequest("POST", "/api/v1/util/clear-csvs", nil)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Error testing clear-csvs endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 202 {
+		t.Errorf("Expected status 202, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+
+	if result["message"] != "Clearing CSV files" {
+		t.Error("Should return 'Clearing CSV files' message")
+	}
+
+	if job, ok := result["job"].(map[string]interface{}); ok {
+		if job["type"] != "clear_csvs" {
+			t.Error("Job type should be 'clear_csvs'")
+		}
+	}
+}
+
+func TestCancelJobEndpoint(t *testing.T) {
+	app := setupTestApp()
+
+	// Clear jobs and create test job
+	jobsMu.Lock()
+	jobs = make(map[string]*Job)
+	jobsMu.Unlock()
+
+	testJob := NewJob("test_cancel_job", fiber.Map{})
+
+	// Add cancel route to test app
+	api := app.Group("/api/v1")
+	api.Post("/jobs/:id/cancel", handleCancelJob)
+
+	req := httptest.NewRequest("POST", "/api/v1/jobs/"+testJob.ID+"/cancel", nil)
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Error testing cancel job endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+
+	if result["message"] != "Job cancelled successfully" {
+		t.Error("Should return 'Job cancelled successfully' message")
+	}
+
+	// Verify job was actually cancelled
+	if !testJob.IsCancelled() {
+		t.Error("Job should be marked as cancelled")
+	}
+}
+
+func TestCancelJobNotFound(t *testing.T) {
+	app := setupTestApp()
+
+	// Add cancel route to test app
+	api := app.Group("/api/v1")
+	api.Post("/jobs/:id/cancel", handleCancelJob)
+
+	req := httptest.NewRequest("POST", "/api/v1/jobs/nonexistent-id/cancel", nil)
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Error testing cancel job endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 404 {
+		t.Errorf("Expected status 404, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+
+	if result["error"] != "Job not found" {
+		t.Error("Should return 'Job not found' error")
+	}
+}
+
+func TestScrapeMonthEndpoint(t *testing.T) {
+	app := setupTestApp()
+
+	payload := map[string]string{
+		"month": "2026-01",
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/api/v1/scrape/month", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, 5000)
+
+	if err != nil {
+		t.Fatalf("Error testing scrape month endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 202 {
+		t.Errorf("Expected status 202, got %d", resp.StatusCode)
+	}
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(respBody, &result)
+
+	// Just check that we got a job response, don't verify exact message
+	if job, ok := result["job"].(map[string]interface{}); !ok || job["type"] != "scrape_month" {
+		t.Error("Should return scrape_month job")
+	}
+}
+
+func TestScrapeYearEndpoint(t *testing.T) {
+	app := setupTestApp()
+
+	payload := map[string]string{
+		"year": "2025",
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/api/v1/scrape/year", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, 5000)
+
+	if err != nil {
+		t.Fatalf("Error testing scrape year endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 202 {
+		t.Errorf("Expected status 202, got %d", resp.StatusCode)
+	}
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(respBody, &result)
+
+	// Just check that we got a job response, don't verify exact message
+	if job, ok := result["job"].(map[string]interface{}); !ok || job["type"] != "scrape_year" {
+		t.Error("Should return scrape_year job")
+	}
+}
+
+func TestDownloadAllEndpoint(t *testing.T) {
+	app := setupTestApp()
+
+	req := httptest.NewRequest("POST", "/api/v1/download/all", nil)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Error testing download all endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 202 {
+		t.Errorf("Expected status 202, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+
+	if result["message"] != "Downloading from all CSVs" {
+		t.Error("Should return 'Downloading from all CSVs' message")
+	}
+
+	if job, ok := result["job"].(map[string]interface{}); ok {
+		if job["type"] != "download_all" {
+			t.Error("Job type should be 'download_all'")
+		}
 	}
 }

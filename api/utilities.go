@@ -717,6 +717,42 @@ func MoveDownloadsToNAS(downloadsDir, nasDir string, job *Job, progressCallback 
 	return result, nil
 }
 
+// ClearCSVsResult contains statistics about CSV clearing operation
+type ClearCSVsResult struct {
+	TotalFiles   int      `json:"total_files"`
+	DeletedFiles int      `json:"deleted_files"`
+	Errors       []string `json:"errors"`
+}
+
+// ClearCSVs removes all CSV files from the csv directory
+func ClearCSVs(csvDir string) (*ClearCSVsResult, error) {
+	result := &ClearCSVsResult{}
+
+	// Check if directory exists
+	if _, err := os.Stat(csvDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("CSV directory does not exist: %s", csvDir)
+	}
+
+	// Get list of CSV files
+	files, err := filepath.Glob(filepath.Join(csvDir, "*.csv"))
+	if err != nil {
+		return nil, fmt.Errorf("error scanning CSV directory: %v", err)
+	}
+
+	result.TotalFiles = len(files)
+
+	// Delete each CSV file
+	for _, file := range files {
+		if err := os.Remove(file); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to delete %s: %v", filepath.Base(file), err))
+			continue
+		}
+		result.DeletedFiles++
+	}
+
+	return result, nil
+}
+
 // copyFile copies a file from src to dst
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)

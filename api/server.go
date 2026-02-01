@@ -49,6 +49,7 @@ func main() {
 	utilGroup.Post("/deduplicate", handleDeduplicate)
 	utilGroup.Post("/move-to-nas", handleMoveToNAS)
 	utilGroup.Post("/match", handleMatchDownloads)
+	utilGroup.Post("/clear-csvs", handleClearCSVs)
 	utilGroup.Get("/stats", handleStats)
 
 	// Track browsing endpoints

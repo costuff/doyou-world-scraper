@@ -57,6 +57,23 @@ export const DownloadControls = () => {
     }
   };
 
+  const handleClearCSVs = async () => {
+    if (!window.confirm('Are you sure you want to delete all CSV files? This cannot be undone.')) {
+      return;
+    }
+    
+    setLoading('clear');
+    setMessage(null);
+    try {
+      const response = await apiService.clearCSVs();
+      setMessage({ type: 'success', text: `Clear CSVs started! Job ID: ${response.data.job.id}` });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to clear CSVs' });
+    } finally {
+      setLoading(null);
+    }
+  };
+
   return (
     <div className="bg-slate-800 rounded-lg p-6 shadow-lg border border-slate-700">
       <h2 className="text-2xl font-bold text-white mb-6">Downloads & Utilities</h2>
@@ -109,6 +126,17 @@ export const DownloadControls = () => {
           <div className="flex justify-between items-center">
             <span>{loading === 'move' ? 'Moving...' : 'Move to NAS'}</span>
             <span className="text-sm opacity-70">Transfer files to network storage</span>
+          </div>
+        </button>
+
+        <button
+          onClick={handleClearCSVs}
+          disabled={!!loading}
+          className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 text-white rounded font-medium transition-colors text-left"
+        >
+          <div className="flex justify-between items-center">
+            <span>{loading === 'clear' ? 'Clearing...' : 'Clear All CSVs'}</span>
+            <span className="text-sm opacity-70">Delete all scraped CSV files</span>
           </div>
         </button>
       </div>

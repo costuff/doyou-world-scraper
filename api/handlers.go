@@ -366,6 +366,35 @@ func handleMatchDownloads(c *fiber.Ctx) error {
 	})
 }
 
+func handleClearCSVs(c *fiber.Ctx) error {
+	csvDir := "./csv"
+	if fileExists("/app/csv") {
+		csvDir = "/app/csv"
+	}
+
+	job := NewJob("clear_csvs", fiber.Map{
+		"csv_dir": csvDir,
+	})
+
+	go func() {
+		result, err := ClearCSVs(csvDir)
+		if err != nil {
+			job.Fail(fmt.Sprintf("Clear CSVs failed: %v", err))
+			return
+		}
+		job.Complete(fiber.Map{
+			"total_files":   result.TotalFiles,
+			"deleted_files": result.DeletedFiles,
+			"errors":        result.Errors,
+		})
+	}()
+
+	return c.Status(202).JSON(fiber.Map{
+		"message": "Clearing CSV files",
+		"job":     job.ToMap(),
+	})
+}
+
 func handleStats(c *fiber.Ctx) error {
 	stats := fiber.Map{
 		"total_csvs":           0,
@@ -532,12 +561,17 @@ func handleGetTracks(c *fiber.Ctx) error {
 				downloadsDir = "/nas"
 			}
 		} else {
-			// Local development - use relative path from project root
-			cwd, err := os.Getwd()
-			if err != nil {
-				return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+			// Local development
+			if downloadsDir == "nas" {
+				downloadsDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+			} else {
+				// Use relative path from project root
+				cwd, err := os.Getwd()
+				if err != nil {
+					return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+				}
+				downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
 			}
-			downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
 		}
 	}
 
@@ -568,12 +602,17 @@ func handleGetTracksStatus(c *fiber.Ctx) error {
 				downloadsDir = "/nas"
 			}
 		} else {
-			// Local development - use relative path from project root
-			cwd, err := os.Getwd()
-			if err != nil {
-				return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+			// Local development
+			if downloadsDir == "nas" {
+				downloadsDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+			} else {
+				// Use relative path from project root
+				cwd, err := os.Getwd()
+				if err != nil {
+					return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
+				}
+				downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
 			}
-			downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
 		}
 	}
 

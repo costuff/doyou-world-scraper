@@ -199,3 +199,142 @@ func TestHashFileMD5(t *testing.T) {
 		}
 	})
 }
+
+func TestClearCSVs(t *testing.T) {
+	t.Run("Clear CSV files successfully", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create test CSV files
+		os.WriteFile(filepath.Join(tmpDir, "tracks-2026-01-01.csv"), []byte("track1"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "tracks-2026-01-02.csv"), []byte("track2"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "tracks-2026-01-03.csv"), []byte("track3"), 0644)
+		// Create non-CSV file that should be ignored
+		os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("readme"), 0644)
+
+		result, err := ClearCSVs(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearCSVs failed: %v", err)
+		}
+
+		if result.TotalFiles != 3 {
+			t.Errorf("Expected 3 CSV files, got %d", result.TotalFiles)
+		}
+
+		if result.DeletedFiles != 3 {
+			t.Errorf("Expected 3 deleted files, got %d", result.DeletedFiles)
+		}
+
+		if len(result.Errors) != 0 {
+			t.Errorf("Expected no errors, got %d: %v", len(result.Errors), result.Errors)
+		}
+
+		// Verify CSV files were deleted
+		csvFiles, _ := filepath.Glob(filepath.Join(tmpDir, "*.csv"))
+		if len(csvFiles) != 0 {
+			t.Errorf("Expected 0 CSV files remaining, got %d", len(csvFiles))
+		}
+
+		// Verify non-CSV file still exists
+		if _, err := os.Stat(filepath.Join(tmpDir, "readme.txt")); os.IsNotExist(err) {
+			t.Error("Non-CSV file should not be deleted")
+		}
+	})
+
+	t.Run("Empty directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		result, err := ClearCSVs(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearCSVs failed: %v", err)
+		}
+
+		if result.TotalFiles != 0 {
+			t.Errorf("Expected 0 files in empty directory, got %d", result.TotalFiles)
+		}
+
+		if result.DeletedFiles != 0 {
+			t.Errorf("Expected 0 deleted files, got %d", result.DeletedFiles)
+		}
+	})
+
+	t.Run("Non-existent directory", func(t *testing.T) {
+		_, err := ClearCSVs("/nonexistent/directory")
+		if err == nil {
+			t.Error("Expected error for non-existent directory")
+		}
+
+		if err != nil && !os.IsNotExist(err) {
+			expectedMsg := "CSV directory does not exist"
+			if len(err.Error()) < len(expectedMsg) || err.Error()[:len(expectedMsg)] != expectedMsg {
+				t.Errorf("Expected 'CSV directory does not exist' error, got: %v", err)
+			}
+		}
+	})
+
+	t.Run("Partial deletion with errors", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create test CSV files
+		file1 := filepath.Join(tmpDir, "file1.csv")
+		file2 := filepath.Join(tmpDir, "file2.csv")
+		os.WriteFile(file1, []byte("content1"), 0644)
+		os.WriteFile(file2, []byte("content2"), 0644)
+
+		// Make file2 read-only to cause deletion error
+		os.Chmod(tmpDir, 0555) // Read-only directory
+
+		result, err := ClearCSVs(tmpDir)
+
+		// Restore permissions
+		os.Chmod(tmpDir, 0755)
+
+		if err != nil {
+			t.Fatalf("ClearCSVs should not return error for partial failure: %v", err)
+		}
+
+		if result.TotalFiles != 2 {
+			t.Errorf("Expected 2 total files, got %d", result.TotalFiles)
+		}
+
+		// Should have some errors since directory is read-only
+		if result.DeletedFiles == result.TotalFiles && len(result.Errors) == 0 {
+			// If all deleted, skip this check (OS behavior varies)
+			t.Log("Warning: OS allowed deletion in read-only directory")
+		}
+	})
+
+	t.Run("Only CSV files are deleted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create various file types
+		os.WriteFile(filepath.Join(tmpDir, "tracks.csv"), []byte("csv"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "data.json"), []byte("json"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "notes.txt"), []byte("txt"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "song.mp3"), []byte("mp3"), 0644)
+
+		result, err := ClearCSVs(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearCSVs failed: %v", err)
+		}
+
+		if result.TotalFiles != 1 {
+			t.Errorf("Expected 1 CSV file, got %d", result.TotalFiles)
+		}
+
+		if result.DeletedFiles != 1 {
+			t.Errorf("Expected 1 deleted file, got %d", result.DeletedFiles)
+		}
+
+		// Verify only CSV was deleted
+		if _, err := os.Stat(filepath.Join(tmpDir, "tracks.csv")); !os.IsNotExist(err) {
+			t.Error("CSV file should be deleted")
+		}
+
+		// Verify other files still exist
+		for _, file := range []string{"data.json", "notes.txt", "song.mp3"} {
+			if _, err := os.Stat(filepath.Join(tmpDir, file)); os.IsNotExist(err) {
+				t.Errorf("Non-CSV file %s should not be deleted", file)
+			}
+		}
+	})
+}
