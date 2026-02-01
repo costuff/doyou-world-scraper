@@ -19,7 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '>=1.21'
           cache: true
           cache-dependency-path: |
             go.sum
@@ -83,12 +83,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '>=1.21'
           cache: true
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64
           working-directory: ./api
-          args: --timeout=5m
+          args: --timeout=5m --skip-dirs-use-default
