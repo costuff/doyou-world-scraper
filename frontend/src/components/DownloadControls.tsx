@@ -62,13 +62,30 @@ export const DownloadControls = () => {
       return;
     }
     
-    setLoading('clear');
+    setLoading('clear-csv');
     setMessage(null);
     try {
       const response = await apiService.clearCSVs();
       setMessage({ type: 'success', text: `Clear CSVs started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to clear CSVs' });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleClearDownloads = async () => {
+    if (!window.confirm('Are you sure you want to delete ALL downloaded MP3 files? This cannot be undone!')) {
+      return;
+    }
+    
+    setLoading('clear-downloads');
+    setMessage(null);
+    try {
+      const response = await apiService.clearDownloads();
+      setMessage({ type: 'success', text: `Clear downloads started! Job ID: ${response.data.job.id}` });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to clear downloads' });
     } finally {
       setLoading(null);
     }
@@ -135,8 +152,19 @@ export const DownloadControls = () => {
           className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 text-white rounded font-medium transition-colors text-left"
         >
           <div className="flex justify-between items-center">
-            <span>{loading === 'clear' ? 'Clearing...' : 'Clear All CSVs'}</span>
+            <span>{loading === 'clear-csv' ? 'Clearing...' : 'Clear All CSVs'}</span>
             <span className="text-sm opacity-70">Delete all scraped CSV files</span>
+          </div>
+        </button>
+
+        <button
+          onClick={handleClearDownloads}
+          disabled={!!loading}
+          className="w-full px-4 py-3 bg-red-700 hover:bg-red-800 disabled:bg-slate-600 text-white rounded font-medium transition-colors text-left border-2 border-red-400"
+        >
+          <div className="flex justify-between items-center">
+            <span>{loading === 'clear-downloads' ? 'Deleting...' : 'Clear All Downloads'}</span>
+            <span className="text-sm opacity-70">⚠️ Delete ALL MP3 files</span>
           </div>
         </button>
       </div>

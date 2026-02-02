@@ -753,6 +753,51 @@ func ClearCSVs(csvDir string) (*ClearCSVsResult, error) {
 	return result, nil
 }
 
+// ClearDownloadsResult contains statistics about downloads clearing operation
+type ClearDownloadsResult struct {
+	TotalFiles   int      `json:"total_files"`
+	DeletedFiles int      `json:"deleted_files"`
+	Errors       []string `json:"errors"`
+}
+
+// ClearDownloads removes all MP3 files from the downloads directory
+func ClearDownloads(downloadsDir string) (*ClearDownloadsResult, error) {
+	result := &ClearDownloadsResult{}
+
+	// Check if directory exists
+	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("downloads directory does not exist: %s", downloadsDir)
+	}
+
+	// Get list of MP3 files
+	var files []string
+	err := filepath.Walk(downloadsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error scanning downloads directory: %v", err)
+	}
+
+	result.TotalFiles = len(files)
+
+	// Delete each MP3 file
+	for _, file := range files {
+		if err := os.Remove(file); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Failed to delete %s: %v", filepath.Base(file), err))
+			continue
+		}
+		result.DeletedFiles++
+	}
+
+	return result, nil
+}
+
 // copyFile copies a file from src to dst
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)

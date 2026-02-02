@@ -395,6 +395,35 @@ func handleClearCSVs(c *fiber.Ctx) error {
 	})
 }
 
+func handleClearDownloads(c *fiber.Ctx) error {
+	downloadsDir := "./downloads"
+	if fileExists("/app/downloads") {
+		downloadsDir = "/app/downloads"
+	}
+
+	job := NewJob("clear_downloads", fiber.Map{
+		"downloads_dir": downloadsDir,
+	})
+
+	go func() {
+		result, err := ClearDownloads(downloadsDir)
+		if err != nil {
+			job.Fail(fmt.Sprintf("Clear downloads failed: %v", err))
+			return
+		}
+		job.Complete(fiber.Map{
+			"total_files":   result.TotalFiles,
+			"deleted_files": result.DeletedFiles,
+			"errors":        result.Errors,
+		})
+	}()
+
+	return c.Status(202).JSON(fiber.Map{
+		"message": "Clearing downloaded files",
+		"job":     job.ToMap(),
+	})
+}
+
 func handleStats(c *fiber.Ctx) error {
 	stats := fiber.Map{
 		"total_csvs":           0,

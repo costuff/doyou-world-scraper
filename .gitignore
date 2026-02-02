@@ -1,8 +1,12 @@
 # Data directories
 /csv/*
 /downloads/*
+/api/csv/*
+/api/downloads/*
 !/csv/.gitkeep
 !/downloads/.gitkeep
+!/api/csv/.gitkeep
+!/api/downloads/.gitkeep
 
 # Logs
 *.log

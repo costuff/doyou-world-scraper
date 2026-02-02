@@ -338,3 +338,164 @@ func TestClearCSVs(t *testing.T) {
 		}
 	})
 }
+
+func TestClearDownloads(t *testing.T) {
+	t.Run("successfully clears all MP3 files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create test MP3 files
+		files := []string{"track1.mp3", "track2.mp3", "track3.mp3"}
+		for _, file := range files {
+			if err := os.WriteFile(filepath.Join(tmpDir, file), []byte("test mp3 data"), 0644); err != nil {
+				t.Fatalf("Failed to create test file: %v", err)
+			}
+		}
+
+		// Create non-MP3 files that should not be deleted
+		if err := os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("do not delete"), 0644); err != nil {
+			t.Fatalf("Failed to create txt file: %v", err)
+		}
+
+		result, err := ClearDownloads(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearDownloads failed: %v", err)
+		}
+
+		if result.TotalFiles != 3 {
+			t.Errorf("Expected 3 total files, got %d", result.TotalFiles)
+		}
+		if result.DeletedFiles != 3 {
+			t.Errorf("Expected 3 deleted files, got %d", result.DeletedFiles)
+		}
+		if len(result.Errors) != 0 {
+			t.Errorf("Expected no errors, got %d: %v", len(result.Errors), result.Errors)
+		}
+
+		// Verify MP3 files are deleted
+		for _, file := range files {
+			if _, err := os.Stat(filepath.Join(tmpDir, file)); !os.IsNotExist(err) {
+				t.Errorf("MP3 file %s should be deleted", file)
+			}
+		}
+
+		// Verify non-MP3 file still exists
+		if _, err := os.Stat(filepath.Join(tmpDir, "readme.txt")); os.IsNotExist(err) {
+			t.Error("Non-MP3 file should not be deleted")
+		}
+	})
+
+	t.Run("handles empty directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		result, err := ClearDownloads(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearDownloads failed: %v", err)
+		}
+
+		if result.TotalFiles != 0 {
+			t.Errorf("Expected 0 total files, got %d", result.TotalFiles)
+		}
+		if result.DeletedFiles != 0 {
+			t.Errorf("Expected 0 deleted files, got %d", result.DeletedFiles)
+		}
+	})
+
+	t.Run("returns error for non-existent directory", func(t *testing.T) {
+		_, err := ClearDownloads("/nonexistent/directory")
+		if err == nil {
+			t.Error("Expected error for non-existent directory")
+		}
+	})
+
+	t.Run("handles nested directories with MP3 files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create nested structure
+		subDir := filepath.Join(tmpDir, "subdir")
+		if err := os.Mkdir(subDir, 0755); err != nil {
+			t.Fatalf("Failed to create subdirectory: %v", err)
+		}
+
+		// Create MP3 in root and subdirectory
+		files := []string{
+			filepath.Join(tmpDir, "root.mp3"),
+			filepath.Join(subDir, "nested.mp3"),
+		}
+		for _, file := range files {
+			if err := os.WriteFile(file, []byte("test"), 0644); err != nil {
+				t.Fatalf("Failed to create file: %v", err)
+			}
+		}
+
+		result, err := ClearDownloads(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearDownloads failed: %v", err)
+		}
+
+		if result.TotalFiles != 2 {
+			t.Errorf("Expected 2 total files, got %d", result.TotalFiles)
+		}
+		if result.DeletedFiles != 2 {
+			t.Errorf("Expected 2 deleted files, got %d", result.DeletedFiles)
+		}
+	})
+
+	t.Run("handles case-insensitive MP3 extensions", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create files with different case extensions
+		files := []string{"track1.mp3", "track2.MP3", "track3.Mp3"}
+		for _, file := range files {
+			if err := os.WriteFile(filepath.Join(tmpDir, file), []byte("test"), 0644); err != nil {
+				t.Fatalf("Failed to create test file: %v", err)
+			}
+		}
+
+		result, err := ClearDownloads(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearDownloads failed: %v", err)
+		}
+
+		if result.TotalFiles != 3 {
+			t.Errorf("Expected 3 total files, got %d", result.TotalFiles)
+		}
+		if result.DeletedFiles != 3 {
+			t.Errorf("Expected 3 deleted files, got %d", result.DeletedFiles)
+		}
+	})
+
+	t.Run("Only MP3 files are deleted", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create various file types
+		os.WriteFile(filepath.Join(tmpDir, "track.mp3"), []byte("mp3"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "data.json"), []byte("json"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "notes.txt"), []byte("txt"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "tracks.csv"), []byte("csv"), 0644)
+
+		result, err := ClearDownloads(tmpDir)
+		if err != nil {
+			t.Fatalf("ClearDownloads failed: %v", err)
+		}
+
+		if result.TotalFiles != 1 {
+			t.Errorf("Expected 1 MP3 file, got %d", result.TotalFiles)
+		}
+
+		if result.DeletedFiles != 1 {
+			t.Errorf("Expected 1 deleted file, got %d", result.DeletedFiles)
+		}
+
+		// Verify only MP3 was deleted
+		if _, err := os.Stat(filepath.Join(tmpDir, "track.mp3")); !os.IsNotExist(err) {
+			t.Error("MP3 file should be deleted")
+		}
+
+		// Verify other files still exist
+		for _, file := range []string{"data.json", "notes.txt", "tracks.csv"} {
+			if _, err := os.Stat(filepath.Join(tmpDir, file)); os.IsNotExist(err) {
+				t.Errorf("Non-MP3 file %s should not be deleted", file)
+			}
+		}
+	})
+}

@@ -14,9 +14,15 @@ type WSMessage struct {
 	Data interface{} `json:"data"`
 }
 
+// WebSocketClient wraps a connection with its own mutex
+type WebSocketClient struct {
+	conn *websocket.Conn
+	mu   sync.Mutex
+}
+
 // WebSocketHub manages all active WebSocket connections
 type WebSocketHub struct {
-	clients    map[*websocket.Conn]bool
+	clients    map[*WebSocketClient]bool
 	broadcast  chan WSMessage
 	register   chan *websocket.Conn
 	unregister chan *websocket.Conn
@@ -29,7 +35,7 @@ var hub *WebSocketHub
 // InitWebSocketHub initializes the WebSocket hub
 func InitWebSocketHub() {
 	hub = &WebSocketHub{
-		clients:    make(map[*websocket.Conn]bool),
+		clients:    make(map[*WebSocketClient]bool),
 		broadcast:  make(chan WSMessage, 256),
 		register:   make(chan *websocket.Conn),
 		unregister: make(chan *websocket.Conn),
@@ -41,32 +47,45 @@ func InitWebSocketHub() {
 func (h *WebSocketHub) run() {
 	for {
 		select {
-		case client := <-h.register:
+		case conn := <-h.register:
+			client := &WebSocketClient{conn: conn}
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
 			log.Printf("WebSocket client registered. Total clients: %d", len(h.clients))
 
-		case client := <-h.unregister:
+		case conn := <-h.unregister:
 			h.mu.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				client.Close()
+			for client := range h.clients {
+				if client.conn == conn {
+					delete(h.clients, client)
+					client.conn.Close()
+					break
+				}
 			}
 			h.mu.Unlock()
 			log.Printf("WebSocket client unregistered. Total clients: %d", len(h.clients))
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
+			clients := make([]*WebSocketClient, 0, len(h.clients))
 			for client := range h.clients {
-				go func(c *websocket.Conn) {
-					if err := c.WriteJSON(message); err != nil {
+				clients = append(clients, client)
+			}
+			h.mu.RUnlock()
+			
+			// Write to each client with proper synchronization
+			for _, client := range clients {
+				go func(c *WebSocketClient) {
+					c.mu.Lock()
+					err := c.conn.WriteJSON(message)
+					c.mu.Unlock()
+					if err != nil {
 						log.Printf("WebSocket write error: %v", err)
-						h.unregister <- c
+						h.unregister <- c.conn
 					}
 				}(client)
 			}
-			h.mu.RUnlock()
 		}
 	}
 }

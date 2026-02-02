@@ -35,6 +35,7 @@ func setupTestApp() *fiber.App {
 	utilGroup.Post("/deduplicate", handleDeduplicate)
 	utilGroup.Post("/match", handleMatchDownloads)
 	utilGroup.Post("/clear-csvs", handleClearCSVs)
+	utilGroup.Post("/clear-downloads", handleClearDownloads)
 	utilGroup.Get("/stats", handleStats)
 
 	api.Get("/jobs", handleGetJobs)
@@ -324,6 +325,41 @@ func TestClearCSVsEndpoint(t *testing.T) {
 	}
 }
 
+func TestClearDownloadsEndpoint(t *testing.T) {
+	app := setupTestApp()
+
+	req := httptest.NewRequest("POST", "/api/v1/util/clear-downloads", nil)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Error testing clear-downloads endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 202 {
+		t.Errorf("Expected status 202, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+
+	if result["message"] != "Clearing downloaded files" {
+		t.Errorf("Expected 'Clearing downloaded files', got '%v'", result["message"])
+	}
+
+	if job, ok := result["job"].(map[string]interface{}); ok {
+		if job["type"] != "clear_downloads" {
+			t.Errorf("Job type should be 'clear_downloads', got '%v'", job["type"])
+		}
+		if job["status"] != "running" {
+			t.Errorf("Job status should be 'running', got '%v'", job["status"])
+		}
+	} else {
+		t.Error("Response should contain job object")
+	}
+}
+
 func TestCancelJobEndpoint(t *testing.T) {
 	app := setupTestApp()
 
@@ -447,6 +483,106 @@ func TestScrapeYearEndpoint(t *testing.T) {
 	// Just check that we got a job response, don't verify exact message
 	if job, ok := result["job"].(map[string]interface{}); !ok || job["type"] != "scrape_year" {
 		t.Error("Should return scrape_year job")
+	}
+}
+
+func TestHandleDeduplicate(t *testing.T) {
+	app := setupTestApp()
+
+	payload := map[string]string{}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/api/v1/util/deduplicate", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Error testing deduplicate endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 202 {
+		t.Errorf("Expected status 202, got %d", resp.StatusCode)
+	}
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(respBody, &result)
+
+	if result["message"] != "Deduplication started" {
+		t.Errorf("Expected 'Deduplication started', got %v", result["message"])
+	}
+
+	if job, ok := result["job"].(map[string]interface{}); ok {
+		if job["type"] != "deduplicate" {
+			t.Error("Job type should be 'deduplicate'")
+		}
+	}
+}
+
+func TestHandleMoveToNAS(t *testing.T) {
+	app := setupTestApp()
+
+	api := app.Group("/api/v1")
+	utilGroup := api.Group("/util")
+	utilGroup.Post("/move-to-nas", handleMoveToNAS)
+
+	payload := map[string]string{}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/api/v1/util/move-to-nas", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Error testing move-to-nas endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 202 {
+		t.Errorf("Expected status 202, got %d", resp.StatusCode)
+	}
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(respBody, &result)
+
+	if result["message"] != "Moving files to NAS" {
+		t.Errorf("Expected 'Moving files to NAS', got %v", result["message"])
+	}
+
+	if job, ok := result["job"].(map[string]interface{}); ok {
+		if job["type"] != "move_to_nas" {
+			t.Error("Job type should be 'move_to_nas'")
+		}
+	}
+}
+
+func TestHandleMatchDownloads(t *testing.T) {
+	app := setupTestApp()
+
+	req := httptest.NewRequest("POST", "/api/v1/util/match", nil)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+
+	if err != nil {
+		t.Fatalf("Error testing match endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 202 {
+		t.Errorf("Expected status 202, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+
+	if result["message"] != "Matching downloads to CSVs" {
+		t.Errorf("Expected 'Matching downloads to CSVs', got %v", result["message"])
+	}
+
+	if job, ok := result["job"].(map[string]interface{}); ok {
+		if job["type"] != "match_downloads" {
+			t.Error("Job type should be 'match_downloads'")
+		}
 	}
 }
 

@@ -50,6 +50,7 @@ func main() {
 	utilGroup.Post("/move-to-nas", handleMoveToNAS)
 	utilGroup.Post("/match", handleMatchDownloads)
 	utilGroup.Post("/clear-csvs", handleClearCSVs)
+	utilGroup.Post("/clear-downloads", handleClearDownloads)
 	utilGroup.Get("/stats", handleStats)
 
 	// Track browsing endpoints
