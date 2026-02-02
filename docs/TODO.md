@@ -21,8 +21,11 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Add WebSocket support for real-time progress updates
 - [x] Add Move to NAS utility for transferring downloads to NAS storage
 - [x] Add Clear CSVs utility for removing scraped CSV files (52.8% test coverage)
+- [x] Add Clear Downloads utility for removing all downloaded MP3 files
+- [x] Fix WebSocket concurrent write panic with per-connection mutex
+- [x] Increase test coverage to 56.2% (up from 50.3%)
 - [ ] **Fix download progress tracking** - Progress only updates per CSV file, not per song (needs fine-grained tracking across all songs)
-- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests
+- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests (currently at 56.2%)
 - [ ] Document development workflow for faster iteration without Docker rebuilds
 
 ### Frontend
