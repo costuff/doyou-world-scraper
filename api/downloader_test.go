@@ -232,7 +232,7 @@ func TestDownloadFromFolder(t *testing.T) {
 		for i := 1; i <= 3; i++ {
 			csvPath := filepath.Join(tmpDir, fmt.Sprintf("tracks-%d.csv", i))
 			content := "Title,Artist,Album,Label,Date,Listen\nTrack,Artist,,,2026,https://soundcloud.com/test\n"
-			os.WriteFile(csvPath, []byte(content), 0644)
+			_ = os.WriteFile(csvPath, []byte(content), 0644)
 		}
 
 		// Create a cancelled job

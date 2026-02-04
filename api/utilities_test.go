@@ -18,9 +18,9 @@ func TestRemoveDuplicates(t *testing.T) {
 	file2Content := []byte("test content 2")
 	duplicateContent := file1Content // Same content as file1
 
-	os.WriteFile(filepath.Join(tmpDownloads, "file1.mp3"), file1Content, 0644)
-	os.WriteFile(filepath.Join(tmpDownloads, "file2.mp3"), file2Content, 0644)
-	os.WriteFile(filepath.Join(tmpNAS, "duplicate.mp3"), duplicateContent, 0644)
+	_ = os.WriteFile(filepath.Join(tmpDownloads, "file1.mp3"), file1Content, 0644)
+	_ = os.WriteFile(filepath.Join(tmpDownloads, "file2.mp3"), file2Content, 0644)
+	_ = os.WriteFile(filepath.Join(tmpNAS, "duplicate.mp3"), duplicateContent, 0644)
 
 	t.Run("Find and remove duplicates", func(t *testing.T) {
 		result, err := RemoveDuplicates(tmpDownloads, tmpNAS, nil, nil)
@@ -57,8 +57,8 @@ func TestRemoveDuplicates(t *testing.T) {
 func TestMoveDownloadsToNAS(t *testing.T) {
 	tmpDownloads := filepath.Join(t.TempDir(), "downloads")
 	tmpNAS := filepath.Join(t.TempDir(), "nas")
-	os.MkdirAll(tmpDownloads, 0755)
-	os.MkdirAll(tmpNAS, 0755)
+	_ = os.MkdirAll(tmpDownloads, 0755)
+	_ = os.MkdirAll(tmpNAS, 0755)
 
 	// Create test MP3 file (> 64KB)
 	largeContent := make([]byte, 70000)
@@ -97,11 +97,11 @@ func TestMoveDownloadsToNAS(t *testing.T) {
 	t.Run("Skip small files", func(t *testing.T) {
 		tmpDownloads2 := filepath.Join(t.TempDir(), "downloads2")
 		tmpNAS2 := filepath.Join(t.TempDir(), "nas2")
-		os.MkdirAll(tmpDownloads2, 0755)
-		os.MkdirAll(tmpNAS2, 0755)
+		_ = os.MkdirAll(tmpDownloads2, 0755)
+		_ = os.MkdirAll(tmpNAS2, 0755)
 
 		smallFile := filepath.Join(tmpDownloads2, "small.mp3")
-		os.WriteFile(smallFile, []byte("small"), 0644)
+		_ = os.WriteFile(smallFile, []byte("small"), 0644)
 
 		result, err := MoveDownloadsToNAS(tmpDownloads2, tmpNAS2, nil, nil)
 		if err != nil {

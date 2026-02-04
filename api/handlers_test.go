@@ -157,7 +157,7 @@ func TestDownloadFromCSVEndpoint(t *testing.T) {
 
 	responseBody, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	json.Unmarshal(responseBody, &result)
+	_ = json.Unmarshal(responseBody, &result)
 
 	if result["message"] != "Download started" {
 		t.Error("Should return 'Download started' message")
@@ -186,7 +186,7 @@ func TestStatsEndpoint(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	json.Unmarshal(body, &result)
+	_ = json.Unmarshal(body, &result)
 
 	// Check that stats contains expected fields
 	expectedFields := []string{
@@ -231,7 +231,7 @@ func TestGetJobsEndpoint(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	json.Unmarshal(body, &result)
+	_ = json.Unmarshal(body, &result)
 
 	if total, ok := result["total"].(float64); !ok || total != 2 {
 		t.Errorf("Expected total 2, got %v", result["total"])

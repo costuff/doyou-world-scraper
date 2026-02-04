@@ -50,7 +50,7 @@ func TestScrapeSingleDate(t *testing.T) {
 func TestFileExists(t *testing.T) {
 	t.Run("Existing file", func(t *testing.T) {
 		tmpFile := filepath.Join(t.TempDir(), "test.txt")
-		os.WriteFile(tmpFile, []byte("test"), 0644)
+		_ = os.WriteFile(tmpFile, []byte("test"), 0644)
 
 		if !fileExists(tmpFile) {
 			t.Error("fileExists should return true for existing file")
