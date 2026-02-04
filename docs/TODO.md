@@ -26,7 +26,8 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Increase test coverage to 56.2% (up from 50.3%)
 - [x] Fix download progress tracking - Progress now updates per song with granular tracking (105 tests, 61.4% coverage)
 - [x] Add detailed job messages - Jobs now show "Downloading: Track Name - Artist" with real-time updates
-- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests (currently at 61.4%)
+- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests (currently at 57.9%)
+- [ ] **Fix golangci-lint configuration** - .golangci.yml has invalid 'skip-dirs' property for v1.64, need to update config or find alternative to exclude legacy scripts
 - [ ] **Fix all errcheck linting violations** - Add proper error checking throughout codebase (currently disabled in CI)
 - [ ] Document development workflow for faster iteration without Docker rebuilds
 
