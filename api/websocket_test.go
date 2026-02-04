@@ -76,7 +76,7 @@ func TestBroadcastJobUpdate(t *testing.T) {
 
 	t.Run("Multiple broadcasts don't block", func(t *testing.T) {
 		done := make(chan bool, 1)
-		
+
 		go func() {
 			for i := 0; i < 100; i++ {
 				job := NewJob("test_broadcast", fiber.Map{"index": i})

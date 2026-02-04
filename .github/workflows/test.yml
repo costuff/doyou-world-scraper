@@ -91,4 +91,4 @@ jobs:
         with:
           version: v1.64
           working-directory: ./api
-          args: --timeout=5m --skip-dirs-use-default
+          args: --timeout=5m
