@@ -71,6 +71,10 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
   - **BPM Distribution** - Histogram of tempo ranges
   - **Label Analytics** - Top labels, release counts
   - **Interactive Filtering** - Click to filter by genre, features, date ranges
+  - **Spectrograms** - Visual frequency/time representation of audio for individual tracks
+    - Mel spectrogram visualization for each song
+    - Interactive spectrogram viewer with playback sync
+    - Compare spectrograms between similar tracks
 - [ ] **Music Recommendation System** - Suggest similar tracks based on audio features
 - [ ] **Playlist Generation** - Auto-create playlists by mood, energy, genre clusters
 
