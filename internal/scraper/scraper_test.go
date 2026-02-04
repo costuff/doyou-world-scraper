@@ -8,6 +8,15 @@ import (
 )
 
 func TestScrapeSingleDate(t *testing.T) {
+	// Create temp directory for CSV files
+	tmpDir := t.TempDir()
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	
+	// Change to temp dir so ./data/csv is created there
+	os.Chdir(tmpDir)
+	os.MkdirAll("data/csv", 0755)
+
 	t.Run("Valid date scraping", func(t *testing.T) {
 		// Skip network-dependent tests in CI or short mode
 		if testing.Short() {
@@ -24,6 +33,12 @@ func TestScrapeSingleDate(t *testing.T) {
 
 		if tracks == 0 {
 			t.Skip("No tracks found (website might be down or no data for this date)")
+		}
+
+		// Verify CSV file was created in correct location
+		csvPath := filepath.Join(tmpDir, "data", "csv", "tracks-"+date+".csv")
+		if _, err := os.Stat(csvPath); os.IsNotExist(err) {
+			t.Errorf("CSV file not created at expected path: %s", csvPath)
 		}
 
 		t.Logf("Successfully scraped %d tracks for date %s", tracks, date)
@@ -45,6 +60,49 @@ func TestScrapeSingleDate(t *testing.T) {
 			t.Error("Expected error for future date, got nil")
 		}
 	})
+}
+
+func TestScrapeMonth(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping long-running test in short mode")
+	}
+
+	// Create temp directory for CSV files
+	tmpDir := t.TempDir()
+	originalDir, _ := os.Getwd()
+	defer os.Chdir(originalDir)
+	
+	// Change to temp dir so ./data/csv is created there
+	os.Chdir(tmpDir)
+	os.MkdirAll("data/csv", 0755)
+
+	// Test scraping last month (should have data)
+	lastMonth := time.Now().AddDate(0, -1, 0).Format("2006-01")
+	
+	days, tracks, err := ScrapeMonth(lastMonth, nil, nil)
+	if err != nil {
+		t.Skipf("Month scraping failed (network issue): %v", err)
+	}
+
+	if days == 0 {
+		t.Error("Expected at least one day to be scraped")
+	}
+
+	if days == 1 {
+		t.Error("ScrapeMonth only scraped 1 day - bug not fixed!")
+	}
+
+	if tracks == 0 {
+		t.Error("Expected at least some tracks to be scraped")
+	}
+
+	// Verify multiple CSV files were created
+	csvFiles, _ := filepath.Glob(filepath.Join(tmpDir, "data", "csv", "*.csv"))
+	if len(csvFiles) < 2 {
+		t.Errorf("Expected at least 2 CSV files for month scraping, got %d", len(csvFiles))
+	}
+
+	t.Logf("Successfully scraped %d days with %d total tracks", days, tracks)
 }
 
 func TestFileExists(t *testing.T) {

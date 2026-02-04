@@ -34,10 +34,7 @@ func scrapeSingleDateWithContext(ctx context.Context, dateStr string) (int, erro
 	url := fmt.Sprintf("https://doyoutrackid.com/tracks/%s", dateStr)
 	fmt.Println("Loading:", url)
 
-	// Create a timeout context for this specific scrape
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
+	// Use the parent context directly - no timeout since we want to reuse the browser
 	var trackNodes []*cdp.Node
 	err = chromedp.Run(ctx,
 		chromedp.Navigate(url),
