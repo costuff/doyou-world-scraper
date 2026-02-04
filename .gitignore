@@ -1,12 +1,8 @@
-# Data directories
-/csv/*
-/downloads/*
-/api/csv/*
-/api/downloads/*
-!/csv/.gitkeep
-!/downloads/.gitkeep
-!/api/csv/.gitkeep
-!/api/downloads/.gitkeep
+# Data directories (new structure)
+/data/csv/*
+/data/downloads/*
+!/data/csv/.gitkeep
+!/data/downloads/.gitkeep
 
 # Test data directories
 /internal/scraper/csv/

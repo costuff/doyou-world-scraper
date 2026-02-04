@@ -8,13 +8,8 @@ run:
     - frontend
 
 issues:
-  exclude-files:
-    - "copy_songs.go"
-    - "download_soundcloud.go"
-    - "main.go"
-    - "match_downloads_to_csv.go"
-    - "remove_duplicates.go"
-    - "scan_genres.go"
+  # No files to exclude - all legacy scripts removed
+  exclude-files: []
 
 linters:
   disable:
