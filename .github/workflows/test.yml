@@ -83,4 +83,3 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.64
-          args: --timeout=5m --disable errcheck --skip-files "copy_songs.go,download_soundcloud.go,main.go,match_downloads_to_csv.go,remove_duplicates.go,scan_genres.go"

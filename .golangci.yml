@@ -1,0 +1,30 @@
+run:
+  timeout: 5m
+  tests: true
+  build-tags: []
+  skip-dirs:
+    - vendor
+    - node_modules
+    - frontend
+
+issues:
+  exclude-files:
+    - "copy_songs.go"
+    - "download_soundcloud.go"
+    - "main.go"
+    - "match_downloads_to_csv.go"
+    - "remove_duplicates.go"
+    - "scan_genres.go"
+
+linters:
+  disable:
+    - errcheck
+  enable:
+    - typecheck
+    - unused
+    - staticcheck
+    - gosimple
+
+linters-settings:
+  govet:
+    enable-all: true
