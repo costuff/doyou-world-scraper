@@ -25,7 +25,8 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Fix WebSocket concurrent write panic with per-connection mutex
 - [x] Increase test coverage to 56.2% (up from 50.3%)
 - [ ] **Fix download progress tracking** - Progress only updates per CSV file, not per song (needs fine-grained tracking across all songs)
-- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests (currently at 56.2%)
+- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests (currently at 55.7%)
+- [ ] **Fix all errcheck linting violations** - Add proper error checking throughout codebase (currently disabled in CI)
 - [ ] Document development workflow for faster iteration without Docker rebuilds
 
 ### Frontend

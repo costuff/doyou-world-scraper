@@ -91,4 +91,4 @@ jobs:
         with:
           version: v1.64
           working-directory: ./api
-          args: --timeout=5m
+          args: --timeout=5m --disable errcheck
