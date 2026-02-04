@@ -227,3 +227,10 @@ func init() {
 		}
 	}()
 }
+
+// ClearAllJobs removes all jobs - FOR TESTING ONLY
+func ClearAllJobs() {
+	jobsMu.Lock()
+	defer jobsMu.Unlock()
+	jobs = make(map[string]*Job)
+}

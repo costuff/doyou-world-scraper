@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"doyou-world-scraper/internal/jobs"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -176,7 +177,7 @@ func TestDownloadFromCSV(t *testing.T) {
 		_ = os.WriteFile(csvPath, []byte(csvContent), 0644)
 
 		// Create a cancelled job
-		job := NewJob("test_download", nil)
+		job := jobs.NewJob("test_download", nil)
 		job.Cancel()
 
 		result, err := DownloadFromCSV(csvPath, 5, outDir, "yt-dlp", job, nil)
@@ -236,7 +237,7 @@ func TestDownloadFromFolder(t *testing.T) {
 		}
 
 		// Create a cancelled job
-		job := NewJob("test_download_folder", nil)
+		job := jobs.NewJob("test_download_folder", nil)
 		job.Cancel()
 
 		result, err := DownloadFromFolder(tmpDir, 5, outDir, "yt-dlp", job, nil)

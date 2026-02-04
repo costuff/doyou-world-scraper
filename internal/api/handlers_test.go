@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"doyou-world-scraper/internal/config"
+	"doyou-world-scraper/internal/jobs"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -11,6 +13,19 @@ import (
 )
 
 func setupTestApp() *fiber.App {
+	// Create test config
+	cfg := &config.Config{
+		Port:         3001,
+		DataDir:      "./test_data",
+		CSVDir:       "./test_data/csv",
+		DownloadsDir: "./test_data/downloads",
+		NASPath:      "/tmp/test_nas",
+		LogLevel:     "info",
+		Environment:  "test",
+	}
+	
+	handlers := NewHandlers(cfg)
+	
 	app := fiber.New()
 
 	api := app.Group("/api/v1")
@@ -23,23 +38,24 @@ func setupTestApp() *fiber.App {
 	})
 
 	scrapeGroup := api.Group("/scrape")
-	scrapeGroup.Post("/date", handleScrapeDate)
-	scrapeGroup.Post("/month", handleScrapeMonth)
-	scrapeGroup.Post("/year", handleScrapeYear)
+	scrapeGroup.Post("/date", handlers.HandleScrapeDate)
+	scrapeGroup.Post("/month", handlers.HandleScrapeMonth)
+	scrapeGroup.Post("/year", handlers.HandleScrapeYear)
 
 	downloadGroup := api.Group("/download")
-	downloadGroup.Post("/csv", handleDownloadFromCSV)
-	downloadGroup.Post("/all", handleDownloadAll)
+	downloadGroup.Post("/csv", handlers.HandleDownloadFromCSV)
+	downloadGroup.Post("/all", handlers.HandleDownloadAll)
 
 	utilGroup := api.Group("/util")
-	utilGroup.Post("/deduplicate", handleDeduplicate)
-	utilGroup.Post("/match", handleMatchDownloads)
-	utilGroup.Post("/clear-csvs", handleClearCSVs)
-	utilGroup.Post("/clear-downloads", handleClearDownloads)
-	utilGroup.Get("/stats", handleStats)
+	utilGroup.Post("/deduplicate", handlers.HandleDeduplicate)
+	utilGroup.Post("/match", handlers.HandleMatchDownloads)
+	utilGroup.Post("/clear-csvs", handlers.HandleClearCSVs)
+	utilGroup.Post("/clear-downloads", handlers.HandleClearDownloads)
+	utilGroup.Get("/stats", handlers.HandleStats)
 
-	api.Get("/jobs", handleGetJobs)
-	api.Get("/jobs/:id", handleGetJob)
+	api.Get("/jobs", handlers.HandleGetJobs)
+	api.Get("/jobs/:id", handlers.HandleGetJob)
+	api.Post("/jobs/:id/cancel", handlers.HandleCancelJob)
 
 	return app
 }
@@ -211,12 +227,10 @@ func TestGetJobsEndpoint(t *testing.T) {
 	app := setupTestApp()
 
 	// Clear jobs and create test jobs
-	jobsMu.Lock()
-	jobs = make(map[string]*Job)
-	jobsMu.Unlock()
+	jobs.ClearAllJobs()
 
-	NewJob("test_job_1", fiber.Map{})
-	NewJob("test_job_2", fiber.Map{})
+	jobs.NewJob("test_job_1", fiber.Map{})
+	jobs.NewJob("test_job_2", fiber.Map{})
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs", nil)
 	resp, err := app.Test(req)
@@ -242,11 +256,9 @@ func TestGetJobByIDEndpoint(t *testing.T) {
 	app := setupTestApp()
 
 	// Clear jobs and create test job
-	jobsMu.Lock()
-	jobs = make(map[string]*Job)
-	jobsMu.Unlock()
+	jobs.ClearAllJobs()
 
-	testJob := NewJob("test_job", fiber.Map{"key": "value"})
+	testJob := jobs.NewJob("test_job", fiber.Map{"key": "value"})
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/"+testJob.ID, nil)
 	resp, err := app.Test(req)
@@ -364,15 +376,9 @@ func TestCancelJobEndpoint(t *testing.T) {
 	app := setupTestApp()
 
 	// Clear jobs and create test job
-	jobsMu.Lock()
-	jobs = make(map[string]*Job)
-	jobsMu.Unlock()
+	jobs.ClearAllJobs()
 
-	testJob := NewJob("test_cancel_job", fiber.Map{})
-
-	// Add cancel route to test app
-	api := app.Group("/api/v1")
-	api.Post("/jobs/:id/cancel", handleCancelJob)
+	testJob := jobs.NewJob("test_cancel_job", fiber.Map{})
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/"+testJob.ID+"/cancel", nil)
 	resp, err := app.Test(req)
@@ -401,10 +407,6 @@ func TestCancelJobEndpoint(t *testing.T) {
 
 func TestCancelJobNotFound(t *testing.T) {
 	app := setupTestApp()
-
-	// Add cancel route to test app
-	api := app.Group("/api/v1")
-	api.Post("/jobs/:id/cancel", handleCancelJob)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/nonexistent-id/cancel", nil)
 	resp, err := app.Test(req)
@@ -520,11 +522,22 @@ func TestHandleDeduplicate(t *testing.T) {
 }
 
 func TestHandleMoveToNAS(t *testing.T) {
-	app := setupTestApp()
+	cfg := &config.Config{
+		Port:         3001,
+		DataDir:      "./test_data",
+		CSVDir:       "./test_data/csv",
+		DownloadsDir: "./test_data/downloads",
+		NASPath:      "/tmp/test_nas",
+		LogLevel:     "info",
+		Environment:  "test",
+	}
+	
+	handlers := NewHandlers(cfg)
+	app := fiber.New()
 
 	api := app.Group("/api/v1")
 	utilGroup := api.Group("/util")
-	utilGroup.Post("/move-to-nas", handleMoveToNAS)
+	utilGroup.Post("/move-to-nas", handlers.HandleMoveToNAS)
 
 	payload := map[string]string{}
 	body, _ := json.Marshal(payload)
