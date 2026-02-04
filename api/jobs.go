@@ -22,7 +22,8 @@ type Job struct {
 	ID         string     `json:"id"`
 	Type       string     `json:"type"`
 	Status     JobStatus  `json:"status"`
-	Progress   int        `json:"progress"` // 0-100
+	Progress   int        `json:"progress"`          // 0-100
+	Message    string     `json:"message,omitempty"` // Current operation message (e.g., "Downloading: Track Name")
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	StartedAt  *time.Time `json:"started_at,omitempty"`
@@ -72,6 +73,27 @@ func (j *Job) Start() {
 func (j *Job) UpdateProgress(progress int) {
 	j.mu.Lock()
 	j.Progress = progress
+	j.UpdatedAt = time.Now()
+	j.mu.Unlock()
+
+	// Broadcast update via WebSocket
+	BroadcastJobUpdate(j)
+}
+
+func (j *Job) UpdateMessage(message string) {
+	j.mu.Lock()
+	j.Message = message
+	j.UpdatedAt = time.Now()
+	j.mu.Unlock()
+
+	// Broadcast update via WebSocket
+	BroadcastJobUpdate(j)
+}
+
+func (j *Job) UpdateProgressWithMessage(progress int, message string) {
+	j.mu.Lock()
+	j.Progress = progress
+	j.Message = message
 	j.UpdatedAt = time.Now()
 	j.mu.Unlock()
 
@@ -144,6 +166,7 @@ func (j *Job) ToMap() fiber.Map {
 		"type":       j.Type,
 		"status":     j.Status,
 		"progress":   j.Progress,
+		"message":    j.Message,
 		"created_at": j.CreatedAt,
 		"updated_at": j.UpdatedAt,
 		"started_at": j.StartedAt,

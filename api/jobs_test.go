@@ -47,6 +47,42 @@ func TestJobUpdateProgress(t *testing.T) {
 	}
 }
 
+func TestJobUpdateMessage(t *testing.T) {
+	job := NewJob("test_download", fiber.Map{})
+
+	message := "Downloading: Track Name by Artist"
+	job.UpdateMessage(message)
+
+	if job.Message != message {
+		t.Errorf("Expected message '%s', got '%s'", message, job.Message)
+	}
+
+	if job.Status != StatusRunning {
+		t.Errorf("Expected status 'running', got '%s'", job.Status)
+	}
+}
+
+func TestJobUpdateProgressWithMessage(t *testing.T) {
+	job := NewJob("test_download", fiber.Map{})
+
+	message := "Downloading: Another Track by Artist"
+	job.UpdateProgressWithMessage(75, message)
+
+	if job.Progress != 75 {
+		t.Errorf("Expected progress 75, got %d", job.Progress)
+	}
+
+	if job.Message != message {
+		t.Errorf("Expected message '%s', got '%s'", message, job.Message)
+	}
+
+	// Check message is included in ToMap
+	jobMap := job.ToMap()
+	if jobMap["message"] != message {
+		t.Errorf("Expected message in ToMap '%s', got '%v'", message, jobMap["message"])
+	}
+}
+
 func TestJobComplete(t *testing.T) {
 	job := NewJob("test_job", fiber.Map{})
 

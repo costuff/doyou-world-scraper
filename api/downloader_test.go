@@ -249,3 +249,130 @@ func TestDownloadFromFolder(t *testing.T) {
 		}
 	})
 }
+
+func TestDownloadFromCSV_ProgressTracking(t *testing.T) {
+	t.Run("Progress callback invoked per song", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		csvPath := filepath.Join(tmpDir, "test.csv")
+		outDir := filepath.Join(tmpDir, "downloads")
+
+		// Create CSV with 3 tracks
+		csvContent := `Title,Artist,Album,Label,Date,Listen
+Track1,Artist1,,,2026,https://soundcloud.com/test/track1
+Track2,Artist2,,,2026,https://soundcloud.com/test/track2
+Track3,Artist3,,,2026,https://soundcloud.com/test/track3
+`
+		_ = os.WriteFile(csvPath, []byte(csvContent), 0644)
+
+		progressCalls := []struct {
+			current, total int
+			title, artist  string
+		}{}
+		progressCallback := func(current, total int, title, artist string) {
+			progressCalls = append(progressCalls, struct {
+				current, total int
+				title, artist  string
+			}{current, total, title, artist})
+		}
+
+		// This will fail to download (no yt-dlp), but should still track progress
+		_, _ = DownloadFromCSV(csvPath, 5, outDir, "fake-yt-dlp-that-doesnt-exist", nil, progressCallback)
+
+		// Verify progress was called for each song
+		if len(progressCalls) != 3 {
+			t.Errorf("Expected 3 progress callbacks, got %d", len(progressCalls))
+		}
+
+		// Verify incremental progress (1/3, 2/3, 3/3) with song info
+		expectedSongs := []struct{ title, artist string }{
+			{"Track1", "Artist1"},
+			{"Track2", "Artist2"},
+			{"Track3", "Artist3"},
+		}
+		for i, call := range progressCalls {
+			expectedCurrent := i + 1
+			expectedTotal := 3
+			if call.current != expectedCurrent || call.total != expectedTotal {
+				t.Errorf("Progress call %d: expected (%d/%d), got (%d/%d)",
+					i, expectedCurrent, expectedTotal, call.current, call.total)
+			}
+			if call.title != expectedSongs[i].title || call.artist != expectedSongs[i].artist {
+				t.Errorf("Progress call %d: expected (%s - %s), got (%s - %s)",
+					i, expectedSongs[i].title, expectedSongs[i].artist, call.title, call.artist)
+			}
+		}
+	})
+}
+
+func TestDownloadFromFolder_GranularProgress(t *testing.T) {
+	t.Run("Progress tracks all songs across all CSVs", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		outDir := filepath.Join(tmpDir, "downloads")
+
+		// Create 2 CSV files with different song counts
+		csv1 := filepath.Join(tmpDir, "tracks-1.csv")
+		csv1Content := `Title,Artist,Album,Label,Date,Listen
+Track1,Artist1,,,2026,https://soundcloud.com/test/track1
+Track2,Artist2,,,2026,https://soundcloud.com/test/track2
+`
+		_ = os.WriteFile(csv1, []byte(csv1Content), 0644)
+
+		csv2 := filepath.Join(tmpDir, "tracks-2.csv")
+		csv2Content := `Title,Artist,Album,Label,Date,Listen
+Track3,Artist3,,,2026,https://soundcloud.com/test/track3
+Track4,Artist4,,,2026,https://soundcloud.com/test/track4
+Track5,Artist5,,,2026,https://soundcloud.com/test/track5
+`
+		_ = os.WriteFile(csv2, []byte(csv2Content), 0644)
+
+		progressCalls := []struct {
+			current, total int
+			title, artist  string
+		}{}
+		progressCallback := func(current, total int, title, artist string) {
+			progressCalls = append(progressCalls, struct {
+				current, total int
+				title, artist  string
+			}{current, total, title, artist})
+		}
+
+		// This will fail to download (no yt-dlp), but should still track progress
+		_, _ = DownloadFromFolder(tmpDir, 5, outDir, "fake-yt-dlp-that-doesnt-exist", nil, progressCallback)
+
+		// Verify progress was called for all 5 songs (2 from CSV1 + 3 from CSV2)
+		if len(progressCalls) != 5 {
+			t.Errorf("Expected 5 progress callbacks (all songs), got %d", len(progressCalls))
+		}
+
+		// Verify total is always 5 (total songs across all CSVs)
+		for i, call := range progressCalls {
+			if call.total != 5 {
+				t.Errorf("Progress call %d: expected total=5, got %d", i, call.total)
+			}
+		}
+
+		// Verify progress increments correctly (1/5, 2/5, 3/5, 4/5, 5/5)
+		for i, call := range progressCalls {
+			expectedCurrent := i + 1
+			if call.current != expectedCurrent {
+				t.Errorf("Progress call %d: expected current=%d, got %d",
+					i, expectedCurrent, call.current)
+			}
+		}
+
+		// Verify song info is passed correctly
+		expectedSongs := []struct{ title, artist string }{
+			{"Track1", "Artist1"},
+			{"Track2", "Artist2"},
+			{"Track3", "Artist3"},
+			{"Track4", "Artist4"},
+			{"Track5", "Artist5"},
+		}
+		for i, call := range progressCalls {
+			if call.title != expectedSongs[i].title || call.artist != expectedSongs[i].artist {
+				t.Errorf("Progress call %d: expected (%s - %s), got (%s - %s)",
+					i, expectedSongs[i].title, expectedSongs[i].artist, call.title, call.artist)
+			}
+		}
+	})
+}

@@ -23,7 +23,7 @@ doyou-world-scraper/
 │   ├── downloader.go      # Download logic (DownloadFromCSV, DownloadFromFolder)
 │   ├── utilities.go       # Utilities (RemoveDuplicates, MatchDownloadsToCSVs)
 │   ├── websocket.go       # WebSocket hub for real-time updates
-│   ├── *_test.go          # Unit tests (99 tests, 55.7% coverage)
+│   ├── *_test.go          # Unit tests (105 tests, 61.4% coverage)
 │   └── README.md          # API documentation
 ├── frontend/              # React frontend dashboard
 │   ├── src/
@@ -182,7 +182,7 @@ cd frontend && npm run dev
 7. **Commit** with test and implementation together
 
 **Test Coverage Goals:**
-- Maintain **80%+ test coverage** for all Go code (currently at 55.7%)
+- Maintain **80%+ test coverage** for all Go code (currently at 61.4%)
 - Write tests for **every new function** - no exceptions
 - Update existing tests when modifying functionality
 - Run tests before every commit: `cd api && go test -v ./...`

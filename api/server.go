@@ -69,7 +69,7 @@ func main() {
 	// Get port from env or use default
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3000"
+		port = "3001" // Changed from 3000 to avoid conflict with VS Code port forwarding
 	}
 
 	log.Printf("Starting server on port %s", port)

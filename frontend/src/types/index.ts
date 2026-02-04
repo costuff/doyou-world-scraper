@@ -3,6 +3,7 @@ export interface Job {
   type: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
+  message?: string; // Current operation message (e.g., "Downloading: Track Name - Artist")
   created_at: string;
   updated_at: string;
   result?: any;

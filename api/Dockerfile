@@ -20,8 +20,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
 # Final stage
 FROM alpine:latest
 
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates chromium yt-dlp tzdata
+# Install runtime dependencies (including Python for pip)
+RUN apk --no-cache add ca-certificates chromium python3 py3-pip tzdata && \
+    pip3 install --no-cache-dir --break-system-packages yt-dlp
 
 # Create app user
 RUN addgroup -g 1000 appuser && \

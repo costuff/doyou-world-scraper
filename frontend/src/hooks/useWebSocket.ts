@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Job, WSMessage } from '../types';
 import { apiService } from '../services/api';
 
-const WS_URL = 'ws://localhost:3000/api/v1/ws';
+const WS_URL = 'ws://localhost:3001/api/v1/ws';
 
 export const useWebSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -45,9 +45,13 @@ export const useWebSocket = () => {
         
         if (message.type === 'job_update' && message.data && message.data.id) {
           setJobs(prev => {
-            // Prevent infinite re-renders by checking if job actually changed
             const existingJob = prev[message.data.id];
-            if (existingJob && JSON.stringify(existingJob) === JSON.stringify(message.data)) {
+            // Quick check: only update if status, progress, message, or error changed
+            if (existingJob && 
+                existingJob.status === message.data.status && 
+                existingJob.progress === message.data.progress &&
+                existingJob.message === message.data.message &&
+                existingJob.error === message.data.error) {
               return prev;
             }
             return {

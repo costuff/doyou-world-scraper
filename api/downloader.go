@@ -132,7 +132,7 @@ func resolvePlayableURL(link string) (string, error) {
 }
 
 // DownloadFromCSV downloads tracks from a single CSV file
-func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, job *Job, progressCallback func(current, total int)) (*DownloadResult, error) {
+func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, job *Job, progressCallback func(current, total int, title, artist string)) (*DownloadResult, error) {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return nil, fmt.Errorf("error creating output dir: %v", err)
 	}
@@ -170,21 +170,7 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, j
 
 		result.TotalSongs++
 
-		if progressCallback != nil {
-			progressCallback(i, len(records))
-		}
-
-		resolved, err := resolvePlayableURL(link)
-		if err != nil {
-			fmt.Printf("Warning: %v\n", err)
-			result.FailedSongs = append(result.FailedSongs, rec)
-			result.Failed++
-			continue
-		}
-
-		fmt.Printf("Downloading: %s\n", resolved)
-
-		// Prepare metadata
+		// Extract metadata early for progress reporting
 		title, artist, album, label, release := "", "", "", "", ""
 		if len(rec) > 0 {
 			title = rec[0]
@@ -201,6 +187,21 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, j
 		if len(rec) > 4 {
 			release = rec[4]
 		}
+
+		// Report progress after each song attempt (not just at start)
+		if progressCallback != nil {
+			progressCallback(result.TotalSongs, len(records)-1, title, artist) // -1 to exclude header
+		}
+
+		resolved, err := resolvePlayableURL(link)
+		if err != nil {
+			fmt.Printf("Warning: %v\n", err)
+			result.FailedSongs = append(result.FailedSongs, rec)
+			result.Failed++
+			continue
+		}
+
+		fmt.Printf("Downloading: %s\n", resolved)
 
 		// Check if already downloaded
 		outFile := ""
@@ -265,13 +266,29 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, j
 }
 
 // DownloadFromFolder downloads from all CSV files in a folder
-func DownloadFromFolder(folderPath string, col int, outDir string, ytdlpPath string, job *Job, progressCallback func(current, total int)) (*DownloadResult, error) {
+func DownloadFromFolder(folderPath string, col int, outDir string, ytdlpPath string, job *Job, progressCallback func(current, total int, title, artist string)) (*DownloadResult, error) {
 	csvFiles, err := filepath.Glob(filepath.Join(folderPath, "*.csv"))
 	if err != nil || len(csvFiles) == 0 {
 		return nil, fmt.Errorf("no CSV files found in %s", folderPath)
 	}
 
+	// Count total songs across all CSVs for accurate progress
+	totalSongsAcrossAllCSVs := 0
+	for _, csvFile := range csvFiles {
+		f, err := os.Open(csvFile)
+		if err != nil {
+			continue
+		}
+		r := csv.NewReader(f)
+		records, _ := r.ReadAll()
+		f.Close()
+		if len(records) > 1 {
+			totalSongsAcrossAllCSVs += len(records) - 1 // -1 for header
+		}
+	}
+
 	totalResult := &DownloadResult{}
+	processedSongs := 0
 
 	for i, csvFile := range csvFiles {
 		// Check if job is cancelled
@@ -281,16 +298,20 @@ func DownloadFromFolder(folderPath string, col int, outDir string, ytdlpPath str
 
 		fmt.Printf("\n=== Processing %s (%d/%d) ===\n", filepath.Base(csvFile), i+1, len(csvFiles))
 
-		if progressCallback != nil {
-			progressCallback(i, len(csvFiles))
+		// Create nested progress callback that reports against total songs
+		nestedProgress := func(current, total int, title, artist string) {
+			if progressCallback != nil {
+				progressCallback(processedSongs+current, totalSongsAcrossAllCSVs, title, artist)
+			}
 		}
 
-		result, err := DownloadFromCSV(csvFile, col, outDir, ytdlpPath, job, nil)
+		result, err := DownloadFromCSV(csvFile, col, outDir, ytdlpPath, job, nestedProgress)
 		if err != nil {
 			fmt.Printf("Error processing %s: %v\n", csvFile, err)
 			continue
 		}
 
+		processedSongs += result.TotalSongs
 		totalResult.TotalSongs += result.TotalSongs
 		totalResult.Downloaded += result.Downloaded
 		totalResult.Failed += result.Failed

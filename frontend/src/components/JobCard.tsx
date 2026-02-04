@@ -1,13 +1,13 @@
 import { format } from 'date-fns';
 import type { Job } from '../types';
 import { apiService } from '../services/api';
-import { useState } from 'react';
+import { useState, memo } from 'react';
 
 interface JobCardProps {
   job: Job;
 }
 
-export const JobCard = ({ job }: JobCardProps) => {
+const JobCardComponent = ({ job }: JobCardProps) => {
   const [cancelling, setCancelling] = useState(false);
 
   const getStatusColor = (status: string) => {
@@ -77,6 +77,9 @@ export const JobCard = ({ job }: JobCardProps) => {
               style={{ width: `${job.progress}%` }}
             />
           </div>
+          {job.message && (
+            <p className="text-xs text-slate-300 mt-2 italic">{job.message}</p>
+          )}
         </div>
       )}
 
@@ -96,3 +99,12 @@ export const JobCard = ({ job }: JobCardProps) => {
     </div>
   );
 };
+
+export const JobCard = memo(JobCardComponent, (prevProps, nextProps) => {
+  // Only re-render if job status, progress, message, or error changed
+  return prevProps.job.status === nextProps.job.status &&
+         prevProps.job.progress === nextProps.job.progress &&
+         prevProps.job.message === nextProps.job.message &&
+         prevProps.job.error === nextProps.job.error &&
+         prevProps.job.result === nextProps.job.result;
+});

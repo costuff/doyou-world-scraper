@@ -24,8 +24,9 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Add Clear Downloads utility for removing all downloaded MP3 files
 - [x] Fix WebSocket concurrent write panic with per-connection mutex
 - [x] Increase test coverage to 56.2% (up from 50.3%)
-- [ ] **Fix download progress tracking** - Progress only updates per CSV file, not per song (needs fine-grained tracking across all songs)
-- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests (currently at 55.7%)
+- [x] Fix download progress tracking - Progress now updates per song with granular tracking (105 tests, 61.4% coverage)
+- [x] Add detailed job messages - Jobs now show "Downloading: Track Name - Artist" with real-time updates
+- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests (currently at 61.4%)
 - [ ] **Fix all errcheck linting violations** - Add proper error checking throughout codebase (currently disabled in CI)
 - [ ] Document development workflow for faster iteration without Docker rebuilds
 
@@ -35,7 +36,7 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Show progress, logs, and results for each operation
 - [x] Real-time job monitoring with WebSocket integration
 - [x] Statistics dashboard (track counts, storage usage, date ranges)
-- [ ] **Fix frontend not updating properly** - UI doesn't reflect changes/updates consistently
+- [x] Fix frontend not updating properly - Optimized stats refresh (30s→5s), removed expensive JSON comparisons, added React.memo
 - [ ] Browse downloaded tracks, search/filter by metadata/genre (PRIORITY 1)
 
 ## Next Steps Priority Order

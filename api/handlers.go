@@ -163,9 +163,10 @@ func handleDownloadFromCSV(c *fiber.Ctx) error {
 		if filepath.IsAbs("downloads") || fileExists("/app/downloads") {
 			downloadsDir = "/app/downloads"
 		}
-		result, err := DownloadFromCSV(req.CSVPath, req.Column, downloadsDir, "yt-dlp", job, func(current, total int) {
+		result, err := DownloadFromCSV(req.CSVPath, req.Column, downloadsDir, "yt-dlp", job, func(current, total int, title, artist string) {
 			progress := int((float64(current) / float64(total)) * 100)
-			job.UpdateProgress(progress)
+			message := fmt.Sprintf("Downloading: %s - %s (%d/%d)", title, artist, current, total)
+			job.UpdateProgressWithMessage(progress, message)
 		})
 		if err != nil {
 			job.Fail(fmt.Sprintf("Download failed: %v", err))
@@ -197,9 +198,10 @@ func handleDownloadAll(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		result, err := DownloadFromFolder(csvDir, 5, downloadsDir, "yt-dlp", job, func(current, total int) {
+		result, err := DownloadFromFolder(csvDir, 5, downloadsDir, "yt-dlp", job, func(current, total int, title, artist string) {
 			progress := int((float64(current) / float64(total)) * 100)
-			job.UpdateProgress(progress)
+			message := fmt.Sprintf("Downloading: %s - %s (%d/%d)", title, artist, current, total)
+			job.UpdateProgressWithMessage(progress, message)
 		})
 		if err != nil {
 			job.Fail(fmt.Sprintf("Download all failed: %v", err))
