@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/api';
 import type { TrackInfo, TrackScanStatus } from '../types';
+import AudioAnalysisDisplay from './AudioAnalysisDisplay';
 
 export default function TrackBrowser() {
   const [tracks, setTracks] = useState<TrackInfo[]>([]);
@@ -16,6 +17,8 @@ export default function TrackBrowser() {
   const [currentTrack, setCurrentTrack] = useState<string | null>(null);
   const [source, setSource] = useState<'downloads' | 'nas'>('downloads');
   const [scanStatus, setScanStatus] = useState<TrackScanStatus | null>(null);
+  const [analyzing, setAnalyzing] = useState<Set<string>>(new Set());
+  const [expandedTrack, setExpandedTrack] = useState<string | null>(null);
   const [nasPath, setNasPath] = useState<string>(() => {
     return localStorage.getItem('nasPath') || '/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks';
   });
@@ -111,6 +114,63 @@ export default function TrackBrowser() {
     } else {
       setSortBy(field);
       setSortOrder('asc');
+    }
+  };
+
+  const handleAnalyzeTrack = async (track: TrackInfo) => {
+    try {
+      setAnalyzing(prev => new Set(prev).add(track.file_path));
+      const response = await apiService.analyzeTrack(track.file_path);
+      const jobId = response.data.job.id;
+
+      // Poll job status
+      const pollInterval = setInterval(async () => {
+        try {
+          const jobResponse = await apiService.getJob(jobId);
+          const job = jobResponse.data;
+          
+          if (job.status === 'completed') {
+            clearInterval(pollInterval);
+            // Update the track with analysis data
+            setTracks(prevTracks =>
+              prevTracks.map(t =>
+                t.file_path === track.file_path
+                  ? { ...t, analysis: job.result.analysis }
+                  : t
+              )
+            );
+            setAnalyzing(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(track.file_path);
+              return newSet;
+            });
+            setExpandedTrack(track.file_path); // Auto-expand to show analysis
+          } else if (job.status === 'failed') {
+            clearInterval(pollInterval);
+            setAnalyzing(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(track.file_path);
+              return newSet;
+            });
+            setError(`Analysis failed: ${job.error}`);
+          }
+        } catch (err) {
+          clearInterval(pollInterval);
+          setAnalyzing(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(track.file_path);
+            return newSet;
+          });
+        }
+      }, 1000);
+
+    } catch (err: any) {
+      setAnalyzing(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(track.file_path);
+        return newSet;
+      });
+      setError(err.response?.data?.error || 'Failed to analyze track');
     }
   };
 
@@ -258,32 +318,68 @@ export default function TrackBrowser() {
                 <th className="px-4 py-3 cursor-pointer hover:bg-slate-600" onClick={() => handleSort('mod_time')}>
                   Date {sortBy === 'mod_time' && (sortOrder === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="px-4 py-3">Play</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {tracks.map((track, index) => (
-                <tr
-                  key={`${track.file_path}-${index}`}
-                  className="border-b border-slate-700 hover:bg-slate-700/50 transition"
-                >
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{track.title || track.filename}</div>
-                  </td>
-                  <td className="px-4 py-3">{track.artist || '-'}</td>
-                  <td className="px-4 py-3 text-slate-400">{track.album || '-'}</td>
-                  <td className="px-4 py-3">{track.duration ? formatDuration(track.duration) : '-'}</td>
-                  <td className="px-4 py-3 text-slate-400">{formatFileSize(track.file_size)}</td>
-                  <td className="px-4 py-3 text-slate-400">{track.mod_time.split(' ')[0]}</td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => setCurrentTrack(track.file_path)}
-                      className="text-blue-400 hover:text-blue-300 transition"
-                    >
-                      ▶
-                    </button>
-                  </td>
-                </tr>
+                <>
+                  <tr
+                    key={`${track.file_path}-${index}`}
+                    className="border-b border-slate-700 hover:bg-slate-700/50 transition"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{track.title || track.filename}</div>
+                    </td>
+                    <td className="px-4 py-3">{track.artist || '-'}</td>
+                    <td className="px-4 py-3 text-slate-400">{track.album || '-'}</td>
+                    <td className="px-4 py-3">{track.duration ? formatDuration(track.duration) : '-'}</td>
+                    <td className="px-4 py-3 text-slate-400">{formatFileSize(track.file_size)}</td>
+                    <td className="px-4 py-3 text-slate-400">{track.mod_time.split(' ')[0]}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setCurrentTrack(track.file_path)}
+                          className="text-blue-400 hover:text-blue-300 transition"
+                          title="Play"
+                        >
+                          ▶
+                        </button>
+                        <button
+                          onClick={() => handleAnalyzeTrack(track)}
+                          disabled={analyzing.has(track.file_path)}
+                          className={`px-2 py-1 text-xs rounded transition ${
+                            analyzing.has(track.file_path)
+                              ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                              : track.analysis
+                              ? 'bg-green-600 hover:bg-green-700 text-white'
+                              : 'bg-purple-600 hover:bg-purple-700 text-white'
+                          }`}
+                          title={track.analysis ? 'Re-analyze' : 'Analyze audio'}
+                        >
+                          {analyzing.has(track.file_path) ? '...' : track.analysis ? '✓' : '🎵'}
+                        </button>
+                        {track.analysis && (
+                          <button
+                            onClick={() => setExpandedTrack(expandedTrack === track.file_path ? null : track.file_path)}
+                            className="text-slate-400 hover:text-slate-300 transition text-xs"
+                            title={expandedTrack === track.file_path ? 'Hide analysis' : 'Show analysis'}
+                          >
+                            {expandedTrack === track.file_path ? '▲' : '▼'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {/* Analysis Display Row */}
+                  {track.analysis && expandedTrack === track.file_path && (
+                    <tr key={`${track.file_path}-analysis`} className="bg-slate-700/30">
+                      <td colSpan={7} className="px-4 py-4">
+                        <AudioAnalysisDisplay analysis={track.analysis} />
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>

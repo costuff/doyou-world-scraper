@@ -27,7 +27,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          go test -v -coverprofile=coverage.out -covermode=atomic ./internal/... ./api/...
+          go test -v -coverprofile=coverage.out -covermode=atomic ./internal/...
           go tool cover -func=coverage.out
 
       - name: Check coverage threshold

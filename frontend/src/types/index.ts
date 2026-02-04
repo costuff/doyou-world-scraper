@@ -47,6 +47,24 @@ export interface TrackInfo {
   file_size: number; // in bytes
   file_path: string;
   mod_time: string;
+  analysis?: AudioAnalysis; // Optional audio analysis data
+}
+
+export interface AudioAnalysis {
+  bpm: number;
+  key: string;
+  duration_seconds: number;
+  energy: number; // 0-1
+  danceability: number; // 0-1
+  valence: number; // 0-1 (mood/happiness)
+  acousticness: number; // 0-1
+  instrumentalness: number; // 0-1
+  speechiness: number; // 0-1
+  liveness: number; // 0-1
+  melodicness: number; // 0-1
+  spectral_centroid_mean?: number;
+  rms_energy_mean?: number;
+  spectrogram_path?: string;
 }
 
 export interface TrackListResult {

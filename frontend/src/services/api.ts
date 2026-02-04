@@ -77,6 +77,13 @@ export const apiService = {
   
   getStreamUrl: (filePath: string) =>
     `${API_BASE}/tracks/stream?file=${encodeURIComponent(filePath)}`,
+
+  // Audio Analysis
+  analyzeTrack: (filePath: string) =>
+    api.post<{ message: string; job: Job }>('/analyze/track', { file_path: filePath }),
+  
+  analyzeAll: (generateSpectrograms: boolean = false) =>
+    api.post<{ message: string; job: Job }>('/analyze/all', { generate_spectrograms: generateSpectrograms }),
 };
 
 export default apiService;
