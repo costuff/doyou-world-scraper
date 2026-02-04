@@ -167,9 +167,9 @@ doyou-world-scraper/
 - [x] Move business logic to `internal/` packages (scraper, downloader, storage, jobs)
 - [x] Add structured logging with zerolog
 - [ ] Add SQLite database for jobs and metadata
-- [ ] Update Dockerfiles to use new structure
+- [x] Update Dockerfiles to use new structure (verified working)
 - [x] Update all imports and tests (210 tests passing)
-- [ ] Update documentation (README, DEVELOPMENT.md, copilot-instructions.md)
+- [x] Update documentation (README, DEVELOPMENT.md, copilot-instructions.md)
 
 ### Configuration Management
 - [x] **Create config package** - Load from env vars with defaults ✅
