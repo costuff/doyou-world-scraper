@@ -74,13 +74,27 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] **Music Recommendation System** - Suggest similar tracks based on audio features
 - [ ] **Playlist Generation** - Auto-create playlists by mood, energy, genre clusters
 
+### Separate Analytics Project (NEW)
+- [ ] **Create doyou-music-analytics repository** - Separate repo for audio analysis and visualizations
+- [ ] **Phase 1: Shared PostgreSQL Database** - Both services read/write to shared PostgreSQL
+  - Design schema for tracks, metadata, audio features
+  - Scraper writes: basic track info, download status
+  - Analytics writes: BPM, key, energy, danceability, etc.
+- [ ] **Phase 2: Event-Driven Architecture with Redis** - Decouple services with pub/sub messaging
+  - Scraper publishes: track_downloaded, track_updated events
+  - Analytics subscribes: processes new tracks for audio analysis
+  - Redis pub/sub for real-time event streaming
+  - Async job processing with retries
+- [ ] **CV Keywords**: Event-driven, microservices, pub/sub, message queue, PostgreSQL, Redis, async processing
+
 ## Next Steps Priority Order
-1. **Music Library Analysis & Visualization** - Advanced metadata extraction + interactive graphs/charts
-2. **Browse/Search UI** - Track library with search/filter/play functionality
-3. **Genre Classification** - Auto-categorize tracks using ML models or Spotify/Shazam APIs
-4. **Music Recommendation Engine** - Similar track suggestions based on audio features
-5. **Docker Deployment** - Package for Raspberry Pi/CasaOS deployment
-6. **Authentication** - User login and access control
+1. **Fix Chromium Process Cleanup** - Ensure browser processes are properly terminated (PRIORITY 1)
+2. **Music Library Analysis & Visualization** - Advanced metadata extraction + interactive graphs/charts (separate repo)
+3. **Browse/Search UI** - Track library with search/filter/play functionality
+4. **PostgreSQL Integration** - Replace in-memory storage with persistent database
+5. **Event-Driven Architecture** - Redis pub/sub for analytics integration
+6. **Docker Deployment** - Package for Raspberry Pi/CasaOS deployment
+7. **Authentication** - User login and access control
 
 ## Code Quality & Architecture Improvements
 

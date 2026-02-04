@@ -20,8 +20,8 @@ type Track struct {
 	Title, Artist, Album, Label, ReleaseDate, Listen string
 }
 
-// ScrapeSingleDate scrapes tracks for a single date and returns the count
-func ScrapeSingleDate(dateStr string) (int, error) {
+// scrapeSingleDateWithContext scrapes tracks for a single date using an existing context
+func scrapeSingleDateWithContext(ctx context.Context, dateStr string) (int, error) {
 	// Validate date is not in the future
 	date, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
@@ -34,10 +34,8 @@ func ScrapeSingleDate(dateStr string) (int, error) {
 	url := fmt.Sprintf("https://doyoutrackid.com/tracks/%s", dateStr)
 	fmt.Println("Loading:", url)
 
-	ctx, cancel := chromedp.NewContext(context.Background())
-	defer cancel()
-
-	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	// Create a timeout context for this specific scrape
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	var trackNodes []*cdp.Node
@@ -100,6 +98,25 @@ func ScrapeSingleDate(dateStr string) (int, error) {
 	return len(tracks), nil
 }
 
+// ScrapeSingleDate scrapes tracks for a single date and returns the count
+// This is the public API that creates and cleans up its own Chrome context
+func ScrapeSingleDate(dateStr string) (int, error) {
+	// Create Chrome allocator and context
+	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(),
+		append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.Flag("headless", true),
+			chromedp.Flag("disable-gpu", true),
+			chromedp.Flag("no-sandbox", true),
+			chromedp.Flag("disable-dev-shm-usage", true),
+		)...)
+	defer allocCancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
+	return scrapeSingleDateWithContext(ctx, dateStr)
+}
+
 // ScrapeMonth scrapes all days in a given month (YYYY-MM format)
 func ScrapeMonth(monthStr string, job *jobs.Job, progressCallback func(current, total int)) (int, int, error) {
 	t, err := time.Parse("2006-01", monthStr)
@@ -119,6 +136,19 @@ func ScrapeMonth(monthStr string, job *jobs.Job, progressCallback func(current, 
 		totalDaysInMonth++
 	}
 
+	// Create a single Chrome allocator for the entire month
+	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(),
+		append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.Flag("headless", true),
+			chromedp.Flag("disable-gpu", true),
+			chromedp.Flag("no-sandbox", true),
+			chromedp.Flag("disable-dev-shm-usage", true),
+		)...)
+	defer allocCancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
 	totalDays := 0
 	totalTracks := 0
 
@@ -133,7 +163,7 @@ func ScrapeMonth(monthStr string, job *jobs.Job, progressCallback func(current, 
 			break
 		}
 		dateStr := d.Format("2006-01-02")
-		count, err := ScrapeSingleDate(dateStr)
+		count, err := scrapeSingleDateWithContext(ctx, dateStr)
 		if err != nil {
 			fmt.Printf("Error scraping %s: %v\n", dateStr, err)
 			continue
@@ -173,6 +203,19 @@ func ScrapeYear(yearStr string, job *jobs.Job, progressCallback func(current, to
 		}
 	}
 
+	// Create a single Chrome allocator for the entire year
+	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(),
+		append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.Flag("headless", true),
+			chromedp.Flag("disable-gpu", true),
+			chromedp.Flag("no-sandbox", true),
+			chromedp.Flag("disable-dev-shm-usage", true),
+		)...)
+	defer allocCancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
 	totalDays := 0
 	totalTracks := 0
 
@@ -190,7 +233,7 @@ func ScrapeYear(yearStr string, job *jobs.Job, progressCallback func(current, to
 				break
 			}
 			dateStr := d.Format("2006-01-02")
-			count, err := ScrapeSingleDate(dateStr)
+			count, err := scrapeSingleDateWithContext(ctx, dateStr)
 			if err != nil {
 				fmt.Printf("Error scraping %s: %v\n", dateStr, err)
 				continue
