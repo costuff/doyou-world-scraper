@@ -38,13 +38,48 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Statistics dashboard (track counts, storage usage, date ranges)
 - [x] Fix frontend not updating properly - Optimized stats refresh (30s→5s), removed expensive JSON comparisons, added React.memo
 - [ ] Browse downloaded tracks, search/filter by metadata/genre (PRIORITY 1)
+- [ ] Music library analysis and visualization dashboard (PRIORITY 1)
+
+### Music Metadata & Analysis (NEW - PRIORITY 1)
+- [ ] **Advanced Metadata Extraction** - Extract comprehensive audio features from downloaded tracks:
+  - Album name and artwork
+  - Release date
+  - Label
+  - BPM (beats per minute)
+  - Musical key and mode
+  - **Audio Features (Shazam-style analysis)**:
+    - **Melodicness** - Clear and memorable tune with well-defined musical patterns
+    - **Acousticness** - Reliance on acoustic vs electronic instruments
+    - **Valence** - Musical positivity/emotional tone (happiness vs sadness)
+    - **Danceability** - Tempo stability, rhythmic patterns, beat emphasis
+    - **Energy** - Perceived intensity based on tempo, dynamics, and musical density
+    - **Instrumentalness** - Likelihood of being instrumental vs vocal
+    - **Speechiness** - Presence of spoken words
+    - **Liveness** - Presence of live audience
+- [ ] **Music Analysis Engine** - Build analysis system to process all 9,875 tracks
+  - Batch processing with progress tracking
+  - Store metadata in database (SQLite or PostgreSQL)
+  - Cache analysis results to avoid re-processing
+- [ ] **Visualization Dashboard** - Create interactive data visualizations:
+  - **Genre Distribution** - Pie chart or treemap of music genres
+  - **Audio Features Graphs**:
+    - Scatter plots (Energy vs Danceability, Valence vs Energy, etc.)
+    - Radar charts for track profiles
+    - Heatmaps showing feature correlations
+  - **Timeline Visualizations** - Track releases over time, genre trends
+  - **BPM Distribution** - Histogram of tempo ranges
+  - **Label Analytics** - Top labels, release counts
+  - **Interactive Filtering** - Click to filter by genre, features, date ranges
+- [ ] **Music Recommendation System** - Suggest similar tracks based on audio features
+- [ ] **Playlist Generation** - Auto-create playlists by mood, energy, genre clusters
 
 ## Next Steps Priority Order
-1. **Browse/Search UI** - Track library with search/filter/play functionality
-2. **Metadata Extraction** - Extract detailed audio metadata (BPM, key, genre, etc.)
-3. **Genre Classification** - Auto-categorize tracks using ML models
-4. **Docker Deployment** - Package for Raspberry Pi/CasaOS deployment
-5. **Authentication** - User login and access control
+1. **Music Library Analysis & Visualization** - Advanced metadata extraction + interactive graphs/charts
+2. **Browse/Search UI** - Track library with search/filter/play functionality
+3. **Genre Classification** - Auto-categorize tracks using ML models or Spotify/Shazam APIs
+4. **Music Recommendation Engine** - Similar track suggestions based on audio features
+5. **Docker Deployment** - Package for Raspberry Pi/CasaOS deployment
+6. **Authentication** - User login and access control
 
 ## Code Quality & Architecture Improvements
 
