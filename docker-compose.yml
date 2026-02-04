@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: Dockerfile
     image: doyou-world-scraper-api:local
     container_name: doyou-api
     restart: unless-stopped

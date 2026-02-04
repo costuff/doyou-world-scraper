@@ -91,10 +91,6 @@ func RemoveDuplicates(downloadsDir, nasDir string, job *jobs.Job, progressCallba
 		}
 	}
 
-	// Report completion of scan phase
-	if progressCallback != nil && totalFiles > 0 {
-		progressCallback(totalFiles, totalFiles)
-	}
 
 	// Remove duplicates
 	for _, f := range filesToRemove {

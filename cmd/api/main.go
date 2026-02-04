@@ -86,6 +86,10 @@ func main() {
 	apiGroup.Get("/tracks/stream", handlers.HandleStreamTrack)
 	apiGroup.Get("/tracks/status", handlers.HandleGetTracksStatus)
 
+	// Audio analysis endpoints
+	apiGroup.Post("/analyze/track", handlers.HandleAnalyzeTrack)
+	apiGroup.Post("/analyze/all", handlers.HandleAnalyzeAll)
+
 	// Jobs endpoint
 	apiGroup.Get("/jobs", handlers.HandleGetJobs)
 	apiGroup.Get("/jobs/:id", handlers.HandleGetJob)

@@ -4,6 +4,14 @@ import apiService from '../services/api';
 export const DownloadControls = () => {
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [nasPath, setNasPath] = useState<string>(() => {
+    return localStorage.getItem('nasPath') || '';
+  });
+
+  const saveNasPath = (path: string) => {
+    setNasPath(path);
+    localStorage.setItem('nasPath', path);
+  };
 
   const handleDownloadAll = async () => {
     setLoading('all');
@@ -22,7 +30,7 @@ export const DownloadControls = () => {
     setLoading('duplicates');
     setMessage(null);
     try {
-      const response = await apiService.removeDuplicates();
+      const response = await apiService.removeDuplicates(nasPath || 'skip');
       setMessage({ type: 'success', text: `Deduplication started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start deduplication' });
@@ -45,10 +53,15 @@ export const DownloadControls = () => {
   };
 
   const handleMoveToNAS = async () => {
+    if (!nasPath) {
+      setMessage({ type: 'error', text: 'Please enter a NAS path first' });
+      return;
+    }
+    
     setLoading('move');
     setMessage(null);
     try {
-      const response = await apiService.moveToNAS();
+      const response = await apiService.moveToNAS(nasPath);
       setMessage({ type: 'success', text: `Move to NAS started! Job ID: ${response.data.job.id}` });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to start move' });
@@ -100,6 +113,23 @@ export const DownloadControls = () => {
           {message.text}
         </div>
       )}
+
+      {/* NAS Path Configuration */}
+      <div className="mb-6 p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+        <label className="block text-sm font-medium text-slate-300 mb-2">
+          NAS Path (for deduplication & move operations)
+        </label>
+        <input
+          type="text"
+          value={nasPath}
+          onChange={(e) => saveNasPath(e.target.value)}
+          placeholder="e.g., /Volumes/MyNAS/Music or leave empty to skip"
+          className="w-full px-3 py-2 bg-slate-800 text-white rounded border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+        />
+        <p className="mt-1 text-xs text-slate-400">
+          Leave empty to scan downloads folder only. Use 'skip' to explicitly skip NAS.
+        </p>
+      </div>
 
       <div className="space-y-3">
         <button

@@ -7,8 +7,10 @@ import (
 	"doyou-world-scraper/internal/jobs"
 	"doyou-world-scraper/internal/scraper"
 	"doyou-world-scraper/internal/storage"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -260,7 +262,17 @@ func (h *Handlers) HandleDeduplicate(c *fiber.Ctx) error {
 		if fileExists("/nas") {
 			nasDir = "/nas"
 		} else {
-			nasDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+			nasDir = h.cfg.NASPath
+		}
+	}
+
+	// Validate NAS directory exists if provided
+	if nasDir != "" && nasDir != "skip" {
+		if _, err := os.Stat(nasDir); os.IsNotExist(err) {
+			return c.Status(400).JSON(fiber.Map{
+				"error":   fmt.Sprintf("NAS directory does not exist: %s", nasDir),
+				"message": "Please check your NAS path or use 'skip' to scan downloads only",
+			})
 		}
 	}
 
@@ -317,8 +329,16 @@ func (h *Handlers) HandleMoveToNAS(c *fiber.Ctx) error {
 		if fileExists("/nas") {
 			nasDir = "/nas"
 		} else {
-			nasDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+			nasDir = h.cfg.NASPath
 		}
+	}
+
+	// Validate NAS directory exists
+	if _, err := os.Stat(nasDir); os.IsNotExist(err) {
+		return c.Status(400).JSON(fiber.Map{
+			"error":   fmt.Sprintf("NAS directory does not exist: %s", nasDir),
+			"message": "Please ensure your NAS is mounted or update the NAS path",
+		})
 	}
 
 	job := jobs.NewJob("move_to_nas", fiber.Map{
@@ -689,4 +709,132 @@ func (h *Handlers) HandleStreamTrack(c *fiber.Ctx) error {
 	c.Set("Accept-Ranges", "bytes")
 
 	return c.SendFile(filepath)
+}
+
+// Audio analysis handler
+func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
+	type Request struct {
+		FilePath string `json:"file_path"`
+	}
+
+	req := new(Request)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	if req.FilePath == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "File path is required"})
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(req.FilePath); os.IsNotExist(err) {
+		return c.Status(404).JSON(fiber.Map{"error": "File not found"})
+	}
+
+	job := jobs.NewJob("analyze_track", fiber.Map{
+		"file_path": req.FilePath,
+	})
+
+	go func() {
+		// Find Python executable in venv
+		pythonPath := filepath.Join(h.cfg.DataDir, "..", ".venv", "bin", "python")
+		if fileExists("/app/.venv/bin/python") {
+			pythonPath = "/app/.venv/bin/python"
+		}
+
+		scriptPath := filepath.Join(h.cfg.DataDir, "..", "scripts", "analyze_audio.py")
+		if fileExists("/app/scripts/analyze_audio.py") {
+			scriptPath = "/app/scripts/analyze_audio.py"
+		}
+
+		// Run Python analysis script
+		cmd := exec.Command(pythonPath, scriptPath, "--single", req.FilePath)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			job.Fail(fmt.Sprintf("Analysis failed: %v - %s", err, string(output)))
+			return
+		}
+
+		// Parse JSON output
+		var analysis map[string]interface{}
+		if err := json.Unmarshal(output, &analysis); err != nil {
+			job.Fail(fmt.Sprintf("Failed to parse analysis results: %v", err))
+			return
+		}
+
+		job.Complete(fiber.Map{
+			"analysis": analysis,
+		})
+	}()
+
+	return c.Status(202).JSON(fiber.Map{
+		"message": "Audio analysis started",
+		"job":     job.ToMap(),
+	})
+}
+
+// Batch analyze multiple tracks
+func (h *Handlers) HandleAnalyzeAll(c *fiber.Ctx) error {
+	type Request struct {
+		GenerateSpectrograms bool `json:"generate_spectrograms"`
+	}
+
+	req := new(Request)
+	if err := c.BodyParser(req); err != nil {
+		// Default to false if no body
+		req.GenerateSpectrograms = false
+	}
+
+	downloadsDir := h.cfg.DownloadsDir
+	if fileExists("/app/data/downloads") {
+		downloadsDir = "/app/data/downloads"
+	}
+
+	job := jobs.NewJob("analyze_all", fiber.Map{
+		"downloads_dir":         downloadsDir,
+		"generate_spectrograms": req.GenerateSpectrograms,
+	})
+
+	go func() {
+		// Find Python executable
+		pythonPath := filepath.Join(h.cfg.DataDir, "..", ".venv", "bin", "python")
+		if fileExists("/app/.venv/bin/python") {
+			pythonPath = "/app/.venv/bin/python"
+		}
+
+		scriptPath := filepath.Join(h.cfg.DataDir, "..", "scripts", "analyze_audio.py")
+		if fileExists("/app/scripts/analyze_audio.py") {
+			scriptPath = "/app/scripts/analyze_audio.py"
+		}
+
+		outputPath := filepath.Join(downloadsDir, "..", "audio_analysis.json")
+		if fileExists("/app/data") {
+			outputPath = "/app/data/audio_analysis.json"
+		}
+
+		args := []string{scriptPath, downloadsDir, "-o", outputPath}
+		if req.GenerateSpectrograms {
+			args = append(args, "--spectrogram")
+		}
+
+		// Run analysis with progress tracking
+		job.UpdateProgressWithMessage(0, "Starting batch analysis...")
+		
+		cmd := exec.Command(pythonPath, args...)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			job.Fail(fmt.Sprintf("Batch analysis failed: %v - %s", err, string(output)))
+			return
+		}
+
+		job.Complete(fiber.Map{
+			"output_file": outputPath,
+			"message":     string(output),
+		})
+	}()
+
+	return c.Status(202).JSON(fiber.Map{
+		"message": "Batch analysis started",
+		"job":     job.ToMap(),
+	})
 }

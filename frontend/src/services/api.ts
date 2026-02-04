@@ -32,11 +32,11 @@ export const apiService = {
     api.post<{ message: string; job: Job }>('/download/all'),
 
   // Utilities
-  removeDuplicates: () =>
-    api.post<{ message: string; job: Job }>('/util/deduplicate', {}),
+  removeDuplicates: (nasDir?: string) =>
+    api.post<{ message: string; job: Job }>('/util/deduplicate', { nas_dir: nasDir }),
   
-  moveToNAS: () =>
-    api.post<{ message: string; job: Job }>('/util/move-to-nas', {}),
+  moveToNAS: (nasDir: string) =>
+    api.post<{ message: string; job: Job }>('/util/move-to-nas', { nas_dir: nasDir }),
   
   matchDownloads: () =>
     api.post<{ message: string; job: Job }>('/util/match', {}),
