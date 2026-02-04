@@ -203,9 +203,9 @@ func (h *Handlers) HandleDownloadFromCSV(c *fiber.Ctx) error {
 func (h *Handlers) HandleDownloadAll(c *fiber.Ctx) error {
 	csvDir := h.cfg.CSVDir
 	downloadsDir := h.cfg.DownloadsDir
-	if fileExists("/app/csv") {
-		csvDir = "/app/csv"
-		downloadsDir = "/app/downloads"
+	if fileExists("/app/data/csv") {
+		csvDir = "/app/data/csv"
+		downloadsDir = "/app/data/downloads"
 	}
 
 	job := jobs.NewJob("download_all", fiber.Map{
@@ -616,12 +616,8 @@ func (h *Handlers) HandleGetTracks(c *fiber.Ctx) error {
 			if downloadsDir == "nas" {
 				downloadsDir = h.cfg.NASPath
 			} else {
-				// Use relative path from project root
-				cwd, err := os.Getwd()
-				if err != nil {
-					return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
-				}
-				downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
+				// Use absolute path from config (already resolved)
+				downloadsDir = h.cfg.DownloadsDir
 			}
 		}
 	}
@@ -658,14 +654,10 @@ func (h *Handlers) HandleGetTracksStatus(c *fiber.Ctx) error {
 		} else {
 			// Local development
 			if downloadsDir == "nas" {
-				downloadsDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+				downloadsDir = h.cfg.NASPath
 			} else {
-				// Use relative path from project root
-				cwd, err := os.Getwd()
-				if err != nil {
-					return c.Status(500).JSON(fiber.Map{"error": fmt.Sprintf("Failed to get working directory: %v", err)})
-				}
-				downloadsDir = filepath.Join(filepath.Dir(cwd), downloadsDir)
+				// Use absolute path from config (already resolved)
+				downloadsDir = h.cfg.DownloadsDir
 			}
 		}
 	}
