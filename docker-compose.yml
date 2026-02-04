@@ -9,11 +9,15 @@ services:
     ports:
       - "${API_PORT:-3000}:3000"
     volumes:
-      - ./csv:/app/csv
-      - ./downloads:/app/downloads
+      - ./data/csv:/app/data/csv
+      - ./data/downloads:/app/data/downloads
       - ${NAS_PATH:-/mnt/music}:/nas
     environment:
       - PORT=3000
+      - DATA_DIR=/app/data
+      - NAS_PATH=/nas
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ENVIRONMENT=production
       - TZ=${TZ:-Europe/Athens}
     networks:
       - doyou-network

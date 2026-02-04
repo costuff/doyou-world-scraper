@@ -7,9 +7,8 @@ This guide explains the best practices for developing new features without rebui
 For fast iteration on backend changes, run the API server **locally** instead of in Docker:
 
 ```bash
-# Terminal 1: Run API locally
-cd api
-go run $(ls *.go | grep -v _test.go)
+# Terminal 1: Run API locally (new structure)
+go run ./cmd/api
 
 # Terminal 2: Run frontend dev server
 cd frontend
@@ -26,7 +25,7 @@ npm run dev
 - 🔍 Direct log output in terminal
 
 **Prerequisites:**
-- Go 1.25+ installed
+- Go 1.23+ installed
 - Chrome/Chromium installed (for scraping)
 - yt-dlp in PATH (for downloads)
 
@@ -47,8 +46,7 @@ npm run dev
 
 ```bash
 # 1. Run locally for development
-cd api
-go run $(ls *.go | grep -v _test.go)
+go run ./cmd/api
 
 # 2. Make your changes in VSCode
 # API auto-reloads on save (if using air or manual restart)
@@ -57,10 +55,9 @@ go run $(ls *.go | grep -v _test.go)
 curl http://localhost:3000/api/v1/your-endpoint
 
 # 4. Write tests
-go test -v ./...
+go test ./internal/... ./api/...
 
 # 5. When ready, test in Docker
-cd ..
 docker compose build api
 docker compose up -d api
 

@@ -4,49 +4,77 @@
 This is a full-stack music scraper and management system for DoYou World Radio. It scrapes daily playlists from doyoutrackid.com, downloads tracks from streaming platforms, manages duplicates, and provides a REST API for automation.
 
 ## Tech Stack
-- **Backend**: Go 1.x with Fiber v2 web framework
+- **Backend**: Go 1.23+ with Fiber v2 web framework
 - **Scraping**: chromedp (headless Chrome) for web scraping
 - **Downloading**: yt-dlp for audio extraction from SoundCloud/YouTube/Spotify/Apple Music
 - **Storage**: Local filesystem + NAS backup at `/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks`
 - **API**: REST API on port 3000 with async job tracking + WebSocket support
-- **Frontend**: React + TypeScript + Vite + Tailwind CSS (port 5173)
-- **Deployment**: (Planned) Docker + Raspberry Pi/CasaOS
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS (port 5173)
+- **Logging**: Structured logging with zerolog
+- **Config**: Centralized configuration via environment variables
+- **Deployment**: Docker + Raspberry Pi/CasaOS compatible
 
-## Project Structure
+## Project Structure (Go Standard Layout)
 ```
 doyou-world-scraper/
-├── api/                    # REST API server
-│   ├── server.go          # Main API entry point (port 3000)
-│   ├── handlers.go        # HTTP request handlers
-│   ├── jobs.go            # Job tracking system (async operations)
-│   ├── scraper.go         # Scraping logic (ScrapeSingleDate, ScrapeMonth, ScrapeYear)
-│   ├── downloader.go      # Download logic (DownloadFromCSV, DownloadFromFolder)
-│   ├── utilities.go       # Utilities (RemoveDuplicates, MatchDownloadsToCSVs)
-│   ├── websocket.go       # WebSocket hub for real-time updates
-│   ├── *_test.go          # Unit tests (105 tests, 61.4% coverage)
-│   └── README.md          # API documentation
-├── frontend/              # React frontend dashboard
+├── cmd/
+│   └── api/                # API server entry point
+│       └── main.go         # Application bootstrap with dependency injection
+├── internal/               # Private application code
+│   ├── api/                # HTTP handlers and routes
+│   │   ├── handlers.go     # HTTP request handlers (Handlers struct with methods)
+│   │   └── handlers_test.go # Handler tests (18 tests)
+│   ├── config/             # Configuration management
+│   │   └── config.go       # Config struct, Load(), Validate(), EnsureDirectories()
+│   ├── downloader/         # Track downloading logic
+│   │   ├── downloader.go   # DownloadFromCSV, DownloadFromFolder
+│   │   └── downloader_test.go # (79 tests)
+│   ├── jobs/               # Job tracking and WebSocket
+│   │   ├── jobs.go         # NewJob, GetJob, GetAllJobs, CancelJob, CleanupOldJobs
+│   │   ├── websocket.go    # WebSocket hub for real-time updates
+│   │   └── jobs_test.go    # (13 tests)
+│   ├── scraper/            # Web scraping logic
+│   │   ├── scraper.go      # ScrapeSingleDate, ScrapeMonth, ScrapeYear
+│   │   └── scraper_test.go # (3 tests)
+│   └── storage/            # File operations and utilities
+│       ├── utilities.go    # RemoveDuplicates, MoveToNAS, ClearCSVs, ClearDownloads, GetTracks
+│       └── utilities_test.go # (9 tests)
+├── pkg/                    # Public/reusable packages
+│   └── logger/             # Structured logging
+│       └── logger.go       # Zerolog wrapper with Init(), Info(), Error(), Debug(), etc.
+├── frontend/               # React frontend dashboard
 │   ├── src/
-│   │   ├── components/   # React components (JobCard, ScrapeControls, etc.)
-│   │   ├── hooks/        # Custom hooks (useWebSocket)
-│   │   ├── services/     # API client (axios)
-│   │   ├── types/        # TypeScript types
-│   │   ├── App.tsx       # Main app component
-│   │   └── main.tsx      # Entry point
+│   │   ├── components/     # React components (JobCard, ScrapeControls, etc.)
+│   │   ├── hooks/          # Custom hooks (useWebSocket)
+│   │   ├── services/       # API client (axios)
+│   │   ├── types/          # TypeScript types
+│   │   ├── App.tsx         # Main app component
+│   │   └── main.tsx        # Entry point
 │   ├── index.html
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── README.md
-├── main.go                # CLI scraper (standalone)
-├── download_soundcloud.go # CLI downloader (standalone)
-├── remove_duplicates.go   # CLI deduplicator (standalone)
-├── match_downloads_to_csv.go # CLI matcher (standalone)
-├── csv/                   # Scraped CSV files (tracks-YYYY-MM-DD.csv)
-├── downloads/             # Downloaded MP3 files (~10,000 files, 40GB)
-├── package.json           # Root package.json for dev workflow
-├── README.md              # Project documentation
-└── TODO.md                # Project roadmap
-
+├── data/                   # Data directory (gitignored)
+│   ├── csv/                # Scraped CSV files (tracks-YYYY-MM-DD.csv)
+│   └── downloads/          # Downloaded MP3 files (~10,000 files, 40GB)
+├── api/                    # Legacy API code (kept for backward compatibility)
+│   ├── *_test.go           # Legacy tests (88 tests)
+│   └── README.md           # API documentation
+├── main.go                 # CLI scraper (standalone, legacy)
+├── download_soundcloud.go  # CLI downloader (standalone, legacy)
+├── remove_duplicates.go    # CLI deduplicator (standalone, legacy)
+├── match_downloads_to_csv.go # CLI matcher (standalone, legacy)
+├── docs/                   # Documentation
+│   ├── TODO.md             # Project roadmap
+│   ├── DEVELOPMENT.md      # Development guide
+│   ├── DOCKER.md           # Docker guide
+│   └── PI-SETUP.md         # Raspberry Pi setup
+├── api/Dockerfile          # API Docker image
+├── frontend/Dockerfile     # Frontend Docker image
+├── docker-compose.yml      # Docker orchestration
+├── package.json            # Root package.json for dev workflow
+├── go.mod                  # Go dependencies
+└── README.md               # Project documentation
 ```
 
 ## Key Functionality
@@ -121,47 +149,9 @@ doyou-world-scraper/
 # Option 1: Single command (recommended)
 npm run dev
 
-# O
-
-### Frontend Development
-```bash
-cd frontend
-npm install               # Install dependencies
-npm run dev              # Start dev server (port 5173)
-npm run build            # Build for production
-npm run preview          # Preview production build
-```ption 2: Separate terminals
-# Terminal 1:
-cd api && go run $(ls *.go | grep -v _test.go)
-# Terminal 2:
-cd frontend && npm run dev
-
-# Option 3: VS Code tasks
-# Cmd+Shift+P → Tasks: Run Task → Start All Servers
-```plicate` - Remove duplicates (body: `{"downloads_dir":"downloads", "nas_dir":"/Volumes/..."}`)
-- `POST /api/v1/util/match` - Match downloads to CSVs
-- `GET /api/v1/util/stats` - Get statistics
-- `GET /api/v1/jobs` - List all jobs
-- `GET /api/v1/jobs/:id` - Get job by ID
-- `GET /api/v1/ws` - WebSocket endpoint for real-time job updates
-
-## ~~**Add WebSocket support** for real-time progress updates~~ ✅ Completed
-2. ~~**Build React frontend** with dashboard for triggering operations~~ ✅ Completed
-3. **Music metadata extraction** using audio libraries
-4. **Docker deployment** for Raspberry Pi/CasaOS
-5. **Authentication** and user management
-6. **Browse/search tracks** UI in frontendlatest scraped CSV
-
-## Development Guidelines
-
-### Running Both Servers
-```bash
-# Option 1: Single command (recommended)
-npm run dev
-
 # Option 2: Separate terminals
 # Terminal 1:
-cd api && go run $(ls *.go | grep -v _test.go)
+go run ./cmd/api
 # Terminal 2:
 cd frontend && npm run dev
 
@@ -182,10 +172,10 @@ cd frontend && npm run dev
 7. **Commit** with test and implementation together
 
 **Test Coverage Goals:**
-- Maintain **80%+ test coverage** for all Go code (currently at 61.4%)
+- Maintain **80%+ test coverage** for all Go code (currently at ~60%)
 - Write tests for **every new function** - no exceptions
 - Update existing tests when modifying functionality
-- Run tests before every commit: `cd api && go test -v ./...`
+- Run tests before every commit: `go test ./...`
 - Never commit production code without corresponding tests
 
 **Testing Standards:**
@@ -199,10 +189,12 @@ cd frontend && npm run dev
 - Use meaningful test names: `TestFunctionName_Scenario_ExpectedBehavior`
 
 **Test Files Location:**
-- `api/*_test.go` - Go test files (handlers_test.go, jobs_test.go, utilities_test.go, etc.)
-- Run: `cd api && go test -v ./...`
-- Coverage: `cd api && go test -cover ./...`
-- Count tests: `go test -v ./... 2>&1 | grep -c "^=== RUN"`
+- `internal/*_test.go` - New structure test files (handlers_test.go, jobs_test.go, etc.)
+- `api/*_test.go` - Legacy test files (still passing)
+- Run: `go test ./internal/... ./api/...`
+- Coverage: `go test -cover ./internal/... ./api/...`
+- Count tests: `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"`
+- **Current Stats**: 210 tests passing, ~60% coverage
 
 **When Adding Features:**
 1. Write tests first (TDD approach preferred)
@@ -213,10 +205,10 @@ cd frontend && npm run dev
 6. Commit with meaningful message
 
 **Documentation Maintenance:**
-- **ALWAYS update test coverage statistics** in line 29 of this file after adding/modifying tests
-- Run `cd api && go test -cover` to get coverage percentage
-- Run `cd api && go test -v ./... 2>&1 | grep -c "^=== RUN"` to count total tests
-- Update format: `# Unit tests (X tests, Y% coverage)`
+- **ALWAYS update test coverage statistics** after adding/modifying tests
+- Run `go test -cover ./internal/... ./api/...` to get coverage percentage
+- Run `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"` to count total tests
+- Update format: `# 210 tests passing, ~60% coverage`
 - Keep API documentation in `api/README.md` synchronized with actual endpoints
 - Update `docs/TODO.md` when completing tasks or adding new ones
 
@@ -243,6 +235,7 @@ github.com/gofiber/websocket/v2
 github.com/chromedp/chromedp
 github.com/chromedp/cdproto
 github.com/google/uuid
+github.com/rs/zerolog
 golang.org/x/net/html
 ```
 
@@ -255,17 +248,23 @@ tailwindcss, autoprefixer, postcss
 typescript, eslint
 ```
 
-Install with: `go get <package>` or `npm install
+Install with: `go get <package>` or `npm install <package>`
+
+## Development Guidelines
+
+### Code Style
 - Use Go standard formatting (`gofmt`)
 - Handle errors explicitly (return error values)
 - Use context with timeouts for chromedp operations
 - Clean up resources with `defer` statements
 - Add progress callbacks for long operations
+- Use structured logging via pkg/logger package
+- Use config package for all path references (no hardcoded paths)
 
 ### Common Patterns
 ```go
 // Job pattern for async operations
-job := NewJob("job_type", fiber.Map{"param": "value"})
+job := jobs.NewJob("job_type", fiber.Map{"param": "value"})
 go func() {
     result, err := SomeOperation(params)
     if err != nil {
@@ -274,31 +273,35 @@ go func() {
     }
     job.Complete(fiber.Map{"result": result})
 }()
+
+// Handler pattern with dependency injection
+type Handlers struct {
+    cfg *config.Config
+}
+
+func (h *Handlers) HandleSomeAction(c *fiber.Ctx) error {
+    csvPath := h.cfg.CSVDir  // Use config, not hardcoded paths
+    logger.Info("Processing action", "path", csvPath)
+    // ...
+}
 ```
 
 ## Next Steps (from TODO.md)
-1. **Add WebSocket support** for real-time progress updates
-2. **Build React frontend** with dashboard for triggering operations
-3. **Music metadata extraction** using audio libraries
-4. **Docker deployment** for Raspberry Pi/CasaOS
-5. **Authentication** and user management
+1. ✅ ~~Add WebSocket support~~ - Completed
+2. ✅ ~~Build React frontend~~ - Completed
+3. ✅ ~~Refactor to Go standard layout~~ - Completed
+4. **Music metadata extraction** using audio libraries (PRIORITY 1)
+5. **Browse/search tracks UI** in frontend (PRIORITY 1)
+6. **Docker deployment** updates for new structure
+7. **Authentication** and user management
 
 ## Important Notes
-- The API server runs on port 3000
+- The API server runs on port 3000 (configurable via PORT env var)
 - All API operations return 202 Accepted immediately with job ID
-- Check job status with `GET /api/v1/jobs/:id`
+- Check job status with `GET /api/v1/jobs/:id` or via WebSocket
 - CSV column 5 (index 5) contains the Listen URL by default
-- NAS path: `/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks`
+- NAS path: Configurable via h.cfg.NASPath (default /Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks)
 - chromedp needs Chrome/Chromium installed
 - yt-dlp must be available in PATH
-
-## Dependencies
-```go
-github.com/gofiber/fiber/v2
-github.com/chromedp/chromedp
-github.com/chromedp/cdproto
-github.com/google/uuid
-golang.org/x/net/html
-```
-
-Install with: `go get <package>`
+- Frontend proxies `/api` requests to backend automatically
+- Stats endpoint checks if NAS exists before scanning

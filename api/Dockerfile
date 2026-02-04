@@ -10,12 +10,13 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy API source code
-COPY api/ ./api/
+# Copy all source code (new structure: cmd/, internal/, pkg/)
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+COPY pkg/ ./pkg/
 
-# Build the binary
-WORKDIR /build/api
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /build/api-server .
+# Build the binary from new entry point
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /build/api-server ./cmd/api
 
 # Final stage
 FROM alpine:latest
@@ -33,8 +34,8 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /build/api-server .
 
-# Create necessary directories
-RUN mkdir -p /app/csv /app/downloads && \
+# Create necessary directories (using new structure)
+RUN mkdir -p /app/data/csv /app/data/downloads && \
     chown -R appuser:appuser /app
 
 USER appuser
@@ -43,6 +44,9 @@ EXPOSE 3000
 
 ENV CHROME_BIN=/usr/bin/chromium-browser \
     CHROME_PATH=/usr/lib/chromium/ \
-    PORT=3000
+    PORT=3000 \
+    DATA_DIR=/app/data \
+    LOG_LEVEL=info \
+    ENVIRONMENT=production
 
 CMD ["./api-server"]
