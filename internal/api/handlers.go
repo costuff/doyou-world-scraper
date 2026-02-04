@@ -527,7 +527,7 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 		if fileExists("/nas") {
 			nasDir = "/nas"
 		}
-		
+
 		// Only scan if NAS directory exists
 		if fileExists(nasDir) {
 			_ = filepath.Walk(nasDir, func(path string, info os.FileInfo, err error) error {
@@ -538,7 +538,7 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 				return nil
 			})
 		}
-		
+
 		stats["nas_downloads"] = nasMP3s
 		stats["nas_size_gb"] = float64(nasDirSize) / 1024 / 1024 / 1024
 		nasDone <- true

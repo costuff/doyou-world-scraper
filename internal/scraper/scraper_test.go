@@ -12,7 +12,7 @@ func TestScrapeSingleDate(t *testing.T) {
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
-	
+
 	// Change to temp dir so ./data/csv is created there
 	os.Chdir(tmpDir)
 	os.MkdirAll("data/csv", 0755)
@@ -71,14 +71,14 @@ func TestScrapeMonth(t *testing.T) {
 	tmpDir := t.TempDir()
 	originalDir, _ := os.Getwd()
 	defer os.Chdir(originalDir)
-	
+
 	// Change to temp dir so ./data/csv is created there
 	os.Chdir(tmpDir)
 	os.MkdirAll("data/csv", 0755)
 
 	// Test scraping last month (should have data)
 	lastMonth := time.Now().AddDate(0, -1, 0).Format("2006-01")
-	
+
 	days, tracks, err := ScrapeMonth(lastMonth, nil, nil)
 	if err != nil {
 		t.Skipf("Month scraping failed (network issue): %v", err)

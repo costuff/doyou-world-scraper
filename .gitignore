@@ -6,6 +6,7 @@
 
 # Test data directories
 /internal/scraper/csv/
+/internal/scraper/data/
 /internal/api/test_data/
 /internal/*/test_data/
 
