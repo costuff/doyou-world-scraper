@@ -8,6 +8,11 @@
 !/api/csv/.gitkeep
 !/api/downloads/.gitkeep
 
+# Test data directories
+/internal/scraper/csv/
+/internal/api/test_data/
+/internal/*/test_data/
+
 # Logs
 *.log
 api.log
