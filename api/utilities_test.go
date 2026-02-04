@@ -10,8 +10,8 @@ func TestRemoveDuplicates(t *testing.T) {
 	// Create temp directories
 	tmpDownloads := filepath.Join(t.TempDir(), "downloads")
 	tmpNAS := filepath.Join(t.TempDir(), "nas")
-	os.MkdirAll(tmpDownloads, 0755)
-	os.MkdirAll(tmpNAS, 0755)
+	_ = os.MkdirAll(tmpDownloads, 0755)
+	_ = os.MkdirAll(tmpNAS, 0755)
 
 	// Create test files
 	file1Content := []byte("test content 1")
@@ -39,7 +39,7 @@ func TestRemoveDuplicates(t *testing.T) {
 
 	t.Run("No duplicates", func(t *testing.T) {
 		tmpDir := filepath.Join(t.TempDir(), "unique")
-		os.MkdirAll(tmpDir, 0755)
+		_ = os.MkdirAll(tmpDir, 0755)
 		os.WriteFile(filepath.Join(tmpDir, "unique1.mp3"), []byte("unique 1"), 0644)
 		os.WriteFile(filepath.Join(tmpDir, "unique2.mp3"), []byte("unique 2"), 0644)
 
@@ -281,12 +281,12 @@ func TestClearCSVs(t *testing.T) {
 		os.WriteFile(file2, []byte("content2"), 0644)
 
 		// Make file2 read-only to cause deletion error
-		os.Chmod(tmpDir, 0555) // Read-only directory
+		_ = os.Chmod(tmpDir, 0555) // Read-only directory
 
 		result, err := ClearCSVs(tmpDir)
 
 		// Restore permissions
-		os.Chmod(tmpDir, 0755)
+		_ = os.Chmod(tmpDir, 0755)
 
 		if err != nil {
 			t.Fatalf("ClearCSVs should not return error for partial failure: %v", err)

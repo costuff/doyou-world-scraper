@@ -60,7 +60,7 @@ func TestHealthEndpoint(t *testing.T) {
 
 	body, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	json.Unmarshal(body, &result)
+	_ = json.Unmarshal(body, &result)
 
 	if result["status"] != "ok" {
 		t.Error("Health check should return status 'ok'")
@@ -89,7 +89,7 @@ func TestScrapeDateEndpoint(t *testing.T) {
 
 	responseBody, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	json.Unmarshal(responseBody, &result)
+	_ = json.Unmarshal(responseBody, &result)
 
 	if result["message"] != "Scraping started" {
 		t.Error("Should return 'Scraping started' message")
@@ -127,7 +127,7 @@ func TestScrapeDateEndpointMissingDate(t *testing.T) {
 
 	responseBody, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	json.Unmarshal(responseBody, &result)
+	_ = json.Unmarshal(responseBody, &result)
 
 	if result["error"] != "Date is required" {
 		t.Error("Should return error message for missing date")

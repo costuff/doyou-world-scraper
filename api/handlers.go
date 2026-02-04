@@ -489,7 +489,7 @@ func handleStats(c *fiber.Ctx) error {
 		if fileExists("/app/downloads") {
 			downloadsDir = "/app/downloads"
 		}
-		filepath.Walk(downloadsDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(downloadsDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
 				totalMP3s++
 				downloadsDirSize += info.Size()
@@ -509,7 +509,7 @@ func handleStats(c *fiber.Ctx) error {
 		if fileExists("/nas") {
 			nasDir = "/nas"
 		}
-		filepath.Walk(nasDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(nasDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
 				nasMP3s++
 				nasDirSize += info.Size()

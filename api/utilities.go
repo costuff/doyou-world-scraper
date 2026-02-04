@@ -39,7 +39,7 @@ func RemoveDuplicates(downloadsDir, nasDir string, job *Job, progressCallback fu
 	// First pass: count total files for progress reporting
 	totalFiles := 0
 	for _, dir := range scanDirs {
-		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() && filepath.Ext(info.Name()) == ".mp3" {
 				totalFiles++
 			}

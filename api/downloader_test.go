@@ -154,7 +154,7 @@ func TestDownloadFromCSV(t *testing.T) {
 		outDir := filepath.Join(tmpDir, "downloads")
 
 		// Create empty CSV
-		os.WriteFile(csvPath, []byte("Title,Artist,Album,Label,Date,Listen\n"), 0644)
+		_ = os.WriteFile(csvPath, []byte("Title,Artist,Album,Label,Date,Listen\n"), 0644)
 
 		result, err := DownloadFromCSV(csvPath, 5, outDir, "yt-dlp", nil, nil)
 		if err != nil {
@@ -173,7 +173,7 @@ func TestDownloadFromCSV(t *testing.T) {
 
 		// Create CSV with one track
 		csvContent := "Title,Artist,Album,Label,Date,Listen\nTest Track,Test Artist,,,2026,https://soundcloud.com/test/track\n"
-		os.WriteFile(csvPath, []byte(csvContent), 0644)
+		_ = os.WriteFile(csvPath, []byte(csvContent), 0644)
 
 		// Create a cancelled job
 		job := NewJob("test_download", nil)
@@ -211,7 +211,7 @@ func TestDownloadFromFolder(t *testing.T) {
 		// Create multiple empty CSV files
 		for i := 1; i <= 3; i++ {
 			csvPath := filepath.Join(tmpDir, fmt.Sprintf("tracks-%d.csv", i))
-			os.WriteFile(csvPath, []byte("Title,Artist,Album,Label,Date,Listen\n"), 0644)
+			_ = os.WriteFile(csvPath, []byte("Title,Artist,Album,Label,Date,Listen\n"), 0644)
 		}
 
 		result, err := DownloadFromFolder(tmpDir, 5, outDir, "yt-dlp", nil, nil)

@@ -91,9 +91,9 @@ func ScrapeSingleDate(dateStr string) (int, error) {
 	w := csv.NewWriter(f)
 	defer w.Flush()
 	// Write header
-	w.Write([]string{"Title", "Artist", "Album", "Label", "ReleaseDate", "Listen"})
+	_ = w.Write([]string{"Title", "Artist", "Album", "Label", "ReleaseDate", "Listen"})
 	for _, t := range tracks {
-		w.Write([]string{t.Title, t.Artist, t.Album, t.Label, t.ReleaseDate, t.Listen})
+		_ = w.Write([]string{t.Title, t.Artist, t.Album, t.Label, t.ReleaseDate, t.Listen})
 	}
 	fmt.Printf("Saved %d tracks to %s\n", len(tracks), outFile)
 	return len(tracks), nil

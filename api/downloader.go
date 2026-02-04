@@ -256,7 +256,7 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, j
 			w := csv.NewWriter(failedFile)
 			defer w.Flush()
 			for _, row := range result.FailedSongs {
-				w.Write(row)
+				_ = w.Write(row) // Error is logged elsewhere
 			}
 		}
 	}
