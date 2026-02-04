@@ -28,13 +28,11 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        working-directory: ./api
         run: go mod download
 
       - name: Run tests with coverage
-        working-directory: ./api
         run: |
-          go test -v -coverprofile=coverage.out -covermode=atomic ./...
+          go test -v -coverprofile=coverage.out -covermode=atomic ./internal/... ./api/...
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "Total coverage: ${COVERAGE}%"
           echo "✅ Tests passed with ${COVERAGE}% coverage"

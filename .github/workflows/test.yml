@@ -21,22 +21,16 @@ jobs:
         with:
           go-version: '1.23'
           cache: true
-          cache-dependency-path: |
-            go.sum
-            api/go.sum
 
       - name: Install dependencies
-        working-directory: ./api
         run: go mod download
 
       - name: Run tests with coverage
-        working-directory: ./api
         run: |
-          go test -v -coverprofile=coverage.out -covermode=atomic ./...
+          go test -v -coverprofile=coverage.out -covermode=atomic ./internal/... ./api/...
           go tool cover -func=coverage.out
 
       - name: Check coverage threshold
-        working-directory: ./api
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "Total coverage: ${COVERAGE}%"
@@ -51,7 +45,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: ./api/coverage.out
+          files: ./coverage.out
           flags: api
           name: api-coverage
           fail_ci_if_error: false
@@ -59,7 +53,6 @@ jobs:
 
       - name: Generate coverage badge
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-        working-directory: ./api
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
           COLOR="red"
@@ -90,5 +83,4 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.64
-          working-directory: ./api
           args: --timeout=5m --disable errcheck
