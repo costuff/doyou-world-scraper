@@ -23,7 +23,7 @@ doyou-world-scraper/
 │   ├── downloader.go      # Download logic (DownloadFromCSV, DownloadFromFolder)
 │   ├── utilities.go       # Utilities (RemoveDuplicates, MatchDownloadsToCSVs)
 │   ├── websocket.go       # WebSocket hub for real-time updates
-│   ├── *_test.go          # Unit tests (16 tests, 53.3% coverage)
+│   ├── *_test.go          # Unit tests (99 tests, 55.7% coverage)
 │   └── README.md          # API documentation
 ├── frontend/              # React frontend dashboard
 │   ├── src/
