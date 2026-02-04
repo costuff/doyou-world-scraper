@@ -91,7 +91,6 @@ func RemoveDuplicates(downloadsDir, nasDir string, job *jobs.Job, progressCallba
 		}
 	}
 
-
 	// Remove duplicates
 	for _, f := range filesToRemove {
 		err := os.Remove(f)

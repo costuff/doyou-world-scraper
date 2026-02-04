@@ -819,7 +819,7 @@ func (h *Handlers) HandleAnalyzeAll(c *fiber.Ctx) error {
 
 		// Run analysis with progress tracking
 		job.UpdateProgressWithMessage(0, "Starting batch analysis...")
-		
+
 		cmd := exec.Command(pythonPath, args...)
 		output, err := cmd.CombinedOutput()
 		if err != nil {

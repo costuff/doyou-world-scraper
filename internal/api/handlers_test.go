@@ -23,9 +23,9 @@ func setupTestApp() *fiber.App {
 		LogLevel:     "info",
 		Environment:  "test",
 	}
-	
+
 	handlers := NewHandlers(cfg)
-	
+
 	app := fiber.New()
 
 	api := app.Group("/api/v1")
@@ -491,7 +491,10 @@ func TestScrapeYearEndpoint(t *testing.T) {
 func TestHandleDeduplicate(t *testing.T) {
 	app := setupTestApp()
 
-	payload := map[string]string{}
+	// Use "skip" to bypass NAS validation for this test
+	payload := map[string]string{
+		"nas_dir": "skip",
+	}
 	body, _ := json.Marshal(payload)
 
 	req := httptest.NewRequest("POST", "/api/v1/util/deduplicate", bytes.NewReader(body))
@@ -522,16 +525,19 @@ func TestHandleDeduplicate(t *testing.T) {
 }
 
 func TestHandleMoveToNAS(t *testing.T) {
+	// Create temporary NAS directory
+	tmpNASDir := t.TempDir()
+
 	cfg := &config.Config{
 		Port:         3001,
 		DataDir:      "./test_data",
 		CSVDir:       "./test_data/csv",
 		DownloadsDir: "./test_data/downloads",
-		NASPath:      "/tmp/test_nas",
+		NASPath:      tmpNASDir,
 		LogLevel:     "info",
 		Environment:  "test",
 	}
-	
+
 	handlers := NewHandlers(cfg)
 	app := fiber.New()
 
@@ -539,7 +545,10 @@ func TestHandleMoveToNAS(t *testing.T) {
 	utilGroup := api.Group("/util")
 	utilGroup.Post("/move-to-nas", handlers.HandleMoveToNAS)
 
-	payload := map[string]string{}
+	// Send NAS directory in payload
+	payload := map[string]string{
+		"nas_dir": tmpNASDir,
+	}
 	body, _ := json.Marshal(payload)
 
 	req := httptest.NewRequest("POST", "/api/v1/util/move-to-nas", bytes.NewReader(body))
