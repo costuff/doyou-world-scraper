@@ -518,21 +518,26 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 		done <- true
 	}()
 
-	// Count NAS (with timeout)
+	// Count NAS (with timeout) - only if directory exists
 	go func() {
 		var nasMP3s int
 		var nasDirSize int64
-		nasDir := "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+		nasDir := h.cfg.NASPath
 		if fileExists("/nas") {
 			nasDir = "/nas"
 		}
-		_ = filepath.Walk(nasDir, func(path string, info os.FileInfo, err error) error {
-			if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
-				nasMP3s++
-				nasDirSize += info.Size()
-			}
-			return nil
-		})
+		
+		// Only scan if NAS directory exists
+		if fileExists(nasDir) {
+			_ = filepath.Walk(nasDir, func(path string, info os.FileInfo, err error) error {
+				if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
+					nasMP3s++
+					nasDirSize += info.Size()
+				}
+				return nil
+			})
+		}
+		
 		stats["nas_downloads"] = nasMP3s
 		stats["nas_size_gb"] = float64(nasDirSize) / 1024 / 1024 / 1024
 		done <- true
@@ -609,7 +614,7 @@ func (h *Handlers) HandleGetTracks(c *fiber.Ctx) error {
 		} else {
 			// Local development
 			if downloadsDir == "nas" {
-				downloadsDir = "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"
+				downloadsDir = h.cfg.NASPath
 			} else {
 				// Use relative path from project root
 				cwd, err := os.Getwd()
@@ -623,7 +628,10 @@ func (h *Handlers) HandleGetTracks(c *fiber.Ctx) error {
 
 	// Check if directory exists
 	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
-		return c.Status(404).JSON(fiber.Map{"error": fmt.Sprintf("Directory not found: %s", downloadsDir)})
+		return c.Status(404).JSON(fiber.Map{
+			"error":   fmt.Sprintf("Directory not found: %s", downloadsDir),
+			"message": "NAS storage may not be mounted or directory doesn't exist",
+		})
 	}
 
 	result, err := storage.GetTracks(downloadsDir, page, perPage, search, sortBy, sortOrder, async)
