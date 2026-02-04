@@ -44,6 +44,155 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 4. **Docker Deployment** - Package for Raspberry Pi/CasaOS deployment
 5. **Authentication** - User login and access control
 
+## Code Quality & Architecture Improvements
+
+### Project Structure Refactoring (HIGH PRIORITY)
+**Current Issues:**
+- ❌ **Duplicate CSV/downloads folders** - Both root and `api/` have csv/downloads directories causing confusion
+- ❌ **Hardcoded paths scattered across codebase** - `./csv`, `./downloads`, `/app/csv`, `/app/downloads` everywhere
+- ❌ **No centralized configuration** - Environment variables not properly managed
+- ❌ **Standalone CLI scripts at root** - main.go, download_soundcloud.go, etc. duplicating API functionality
+- ❌ **Mixed concerns** - Handlers contain business logic and path resolution
+- ❌ **No proper logging** - Printf statements instead of structured logging
+- ❌ **No database** - All state in memory/files, jobs lost on restart
+
+**Proposed New Structure:**
+```
+doyou-world-scraper/
+├── cmd/
+│   ├── api/              # API server entry point
+│   │   └── main.go
+│   └── cli/              # CLI tools (scraper, downloader)
+│       ├── scrape.go
+│       ├── download.go
+│       └── dedupe.go
+├── internal/             # Private application code
+│   ├── config/           # Configuration management
+│   │   ├── config.go     # Load from env/files
+│   │   └── paths.go      # Centralized path resolution
+│   ├── scraper/          # Scraping logic
+│   │   ├── scraper.go
+│   │   └── scraper_test.go
+│   ├── downloader/       # Download logic
+│   │   ├── downloader.go
+│   │   ├── resolver.go
+│   │   └── downloader_test.go
+│   ├── storage/          # File operations
+│   │   ├── csv.go
+│   │   ├── downloads.go
+│   │   └── storage_test.go
+│   ├── jobs/             # Job management
+│   │   ├── job.go
+│   │   ├── manager.go    # Persistent job storage
+│   │   └── jobs_test.go
+│   ├── api/              # HTTP handlers
+│   │   ├── handlers.go
+│   │   ├── middleware.go
+│   │   └── routes.go
+│   └── metadata/         # Track metadata extraction
+│       └── extractor.go
+├── pkg/                  # Public/reusable packages
+│   └── logger/           # Structured logging
+│       └── logger.go
+├── data/                 # Single data directory (NOT duplicated)
+│   ├── csv/              # Scraped CSV files
+│   ├── downloads/        # Downloaded MP3 files
+│   └── db/               # SQLite database for jobs/metadata
+├── frontend/             # React frontend (unchanged)
+├── deployments/          # Deployment configs
+│   ├── docker/
+│   │   ├── api.Dockerfile
+│   │   └── frontend.Dockerfile
+│   └── kubernetes/       # Future K8s manifests
+├── scripts/              # Build/deploy scripts
+│   └── pi-deploy.sh
+├── docs/                 # Documentation
+├── .env.example          # Environment template
+├── go.mod
+└── README.md
+```
+
+**Benefits:**
+- ✅ Single source of truth for data directories
+- ✅ Centralized configuration with validation
+- ✅ Clear separation of concerns (cmd/internal/pkg pattern)
+- ✅ Easier to test and maintain
+- ✅ Standard Go project layout
+- ✅ Proper logging and error handling
+- ✅ Database for persistent state
+
+**Implementation Tasks:**
+- [ ] Create new directory structure
+- [ ] Extract configuration management into `internal/config`
+- [ ] Centralize path resolution (stop hardcoding ./csv, ./downloads)
+- [ ] Move API code to `cmd/api` and `internal/api`
+- [ ] Refactor standalone scripts into `cmd/cli`
+- [ ] Move business logic to `internal/` packages
+- [ ] Add structured logging with zerolog or zap
+- [ ] Add SQLite database for jobs and metadata
+- [ ] Update Dockerfiles to use new structure
+- [ ] Update all imports and tests
+- [ ] Update documentation
+
+### Configuration Management
+- [ ] **Create config package** - Load from env vars with defaults
+  ```go
+  type Config struct {
+    DataDir      string  // Base data directory
+    CSVDir       string  // Computed: DataDir/csv
+    DownloadsDir string  // Computed: DataDir/downloads
+    NASPath      string
+    Port         int
+    LogLevel     string
+  }
+  ```
+- [ ] **Environment validation** - Fail fast on startup if config invalid
+- [ ] **Hot reload config** - Watch .env for changes without restart
+
+### Code Organization
+- [ ] **Extract handlers logic** - Move business logic out of handlers.go into service layer
+- [ ] **Repository pattern** - Abstract file operations for easier testing
+- [ ] **Dependency injection** - Pass dependencies instead of global variables
+- [ ] **Consistent error handling** - Custom error types with context
+- [ ] **Remove code duplication** - DRY principle for path resolution logic
+
+### Data Management
+- [ ] **SQLite database** - Persist jobs, track metadata, scan results
+  ```sql
+  CREATE TABLE jobs (id TEXT, type TEXT, status TEXT, progress INT, created_at DATETIME);
+  CREATE TABLE tracks (id TEXT, filename TEXT, title TEXT, artist TEXT, metadata JSON);
+  ```
+- [ ] **Database migrations** - Version control for schema changes
+- [ ] **Backup/restore** - Regular database backups to NAS
+
+### Logging & Monitoring
+- [ ] **Structured logging** - Use zerolog/zap instead of fmt.Printf
+- [ ] **Log levels** - DEBUG, INFO, WARN, ERROR with proper filtering
+- [ ] **Request logging** - HTTP request/response with timing
+- [ ] **Performance metrics** - Track scrape/download speeds, success rates
+- [ ] **Health checks** - More comprehensive health endpoint
+
+### Testing Improvements
+- [ ] **Test fixtures** - Reusable test data in testdata/ directory
+- [ ] **Integration tests** - Test full workflows end-to-end
+- [ ] **Mock external services** - yt-dlp, chromedp for reliable tests
+- [ ] **Table-driven tests** - Consistent test patterns
+- [ ] **Coverage goal: 80%+** - Currently at 56.7%
+
+### Developer Experience
+- [ ] **Makefile** - Common commands (test, build, run, docker)
+  ```makefile
+  test:
+    cd internal && go test -v -cover ./...
+  run:
+    go run cmd/api/main.go
+  docker-build:
+    docker compose build
+  ```
+- [ ] **Pre-commit hooks** - Auto-format, lint, test before commit
+- [ ] **VSCode launch configs** - Debug configurations for Go
+- [ ] **API documentation** - OpenAPI/Swagger spec
+
 ### Music Metadata & Categorization
 - [ ] Integrate a tool/library to extract audio metadata (artist, title, album, year, genre, etc.)
 - [ ] Use a music classification library or ML model to auto-categorize tracks by genre/style
