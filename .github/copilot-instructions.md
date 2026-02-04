@@ -170,13 +170,23 @@ cd frontend && npm run dev
 ```
 
 ### Testing Requirements
-**IMPORTANT**: This project prioritizes test coverage and maintainability.
+**CRITICAL**: This project follows Test-Driven Development (TDD). All features MUST have tests written first.
+
+**Test-Driven Development Workflow (MANDATORY):**
+1. **Write failing test first** - Before writing any production code
+2. **Run test and verify it fails** - `cd api && go test -v ./...`
+3. **Write minimal code** to make the test pass
+4. **Run test and verify it passes**
+5. **Refactor** if needed while keeping tests green
+6. **Update test stats** in line 29 of this file (test count and coverage %)
+7. **Commit** with test and implementation together
 
 **Test Coverage Goals:**
-- Maintain **80%+ test coverage** for all Go code
-- Write tests for **every new function** before committing
+- Maintain **80%+ test coverage** for all Go code (currently at 55.7%)
+- Write tests for **every new function** - no exceptions
 - Update existing tests when modifying functionality
 - Run tests before every commit: `cd api && go test -v ./...`
+- Never commit production code without corresponding tests
 
 **Testing Standards:**
 - Unit tests: Test individual functions in isolation
@@ -185,11 +195,14 @@ cd frontend && npm run dev
 - Mock external dependencies (network calls, file system when appropriate)
 - Use `t.TempDir()` for file system tests
 - Add `t.Skip()` for tests that require network/external resources
+- Test both happy path and error cases
+- Use meaningful test names: `TestFunctionName_Scenario_ExpectedBehavior`
 
 **Test Files Location:**
 - `api/*_test.go` - Go test files (handlers_test.go, jobs_test.go, utilities_test.go, etc.)
 - Run: `cd api && go test -v ./...`
 - Coverage: `cd api && go test -cover ./...`
+- Count tests: `go test -v ./... 2>&1 | grep -c "^=== RUN"`
 
 **When Adding Features:**
 1. Write tests first (TDD approach preferred)
@@ -206,6 +219,8 @@ cd frontend && npm run dev
 - Update format: `# Unit tests (X tests, Y% coverage)`
 - Keep API documentation in `api/README.md` synchronized with actual endpoints
 - Update `docs/TODO.md` when completing tasks or adding new ones
+
+**Remember:** Tests are not optional. They are part of the feature. A feature without tests is an incomplete feature.
 
 **Documentation:**
 - Keep `docs/TODO.md` updated with task status
