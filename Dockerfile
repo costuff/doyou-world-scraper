@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o api ./cmd/api
 # Runtime stage
 FROM alpine:latest
 
-# Install runtime dependencies
+# Install build dependencies and runtime dependencies
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
@@ -32,7 +32,14 @@ RUN apk add --no-cache \
     ttf-freefont \
     python3 \
     py3-pip \
-    ffmpeg
+    ffmpeg \
+    # Build dependencies for Python packages
+    gcc \
+    g++ \
+    musl-dev \
+    python3-dev \
+    openblas-dev \
+    gfortran
 
 WORKDIR /app
 
@@ -44,6 +51,9 @@ COPY scripts/ ./scripts/
 
 # Install Python dependencies
 RUN pip3 install --no-cache-dir -r scripts/requirements.txt --break-system-packages
+
+# Remove build dependencies to reduce image size
+RUN apk del gcc g++ musl-dev python3-dev gfortran
 
 # Create data directories
 RUN mkdir -p /app/data/csv /app/data/downloads
