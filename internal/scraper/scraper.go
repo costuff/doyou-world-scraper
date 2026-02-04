@@ -73,10 +73,10 @@ func scrapeSingleDateWithContext(ctx context.Context, dateStr string) (int, erro
 		tracks = append(tracks, Track{title, artist, album, label, releaseDate, listen})
 	}
 
-	// Write to CSV in csv/tracks-[date].csv
-	csvDir := "./csv"
-	if fileExists("/app/csv") {
-		csvDir = "/app/csv"
+	// Write to CSV in data/csv/tracks-[date].csv
+	csvDir := "./data/csv"
+	if fileExists("/app/data/csv") {
+		csvDir = "/app/data/csv"
 	}
 	if err := os.MkdirAll(csvDir, 0755); err != nil {
 		return 0, fmt.Errorf("error creating csv directory: %v", err)
