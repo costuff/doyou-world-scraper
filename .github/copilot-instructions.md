@@ -196,7 +196,16 @@ cd frontend && npm run dev
 2. Implement feature
 3. Ensure tests pass
 4. Check coverage: `go test -cover`
-5. Commit with meaningful message
+5. **Update test stats in this file** - Update line 29 with: `go test -v ./... 2>&1 | grep -c "^=== RUN"` and `go test -cover`
+6. Commit with meaningful message
+
+**Documentation Maintenance:**
+- **ALWAYS update test coverage statistics** in line 29 of this file after adding/modifying tests
+- Run `cd api && go test -cover` to get coverage percentage
+- Run `cd api && go test -v ./... 2>&1 | grep -c "^=== RUN"` to count total tests
+- Update format: `# Unit tests (X tests, Y% coverage)`
+- Keep API documentation in `api/README.md` synchronized with actual endpoints
+- Update `docs/TODO.md` when completing tasks or adding new ones
 
 **Documentation:**
 - Keep `docs/TODO.md` updated with task status
