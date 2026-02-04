@@ -175,8 +175,8 @@ func (h *Handlers) HandleDownloadFromCSV(c *fiber.Ctx) error {
 
 	go func() {
 		downloadsDir := h.cfg.DownloadsDir
-		if filepath.IsAbs(h.cfg.DownloadsDir) || fileExists("/app/downloads") {
-			downloadsDir = "/app/downloads"
+		if fileExists("/app/data/downloads") {
+			downloadsDir = "/app/data/downloads"
 		}
 		result, err := downloader.DownloadFromCSV(req.CSVPath, req.Column, downloadsDir, "yt-dlp", job, func(current, total int, title, artist string) {
 			progress := int((float64(current) / float64(total)) * 100)
@@ -305,8 +305,8 @@ func (h *Handlers) HandleMoveToNAS(c *fiber.Ctx) error {
 
 	downloadsDir := req.DownloadsDir
 	if downloadsDir == "" {
-		if fileExists("/app/downloads") {
-			downloadsDir = "/app/downloads"
+		if fileExists("/app/data/downloads") {
+			downloadsDir = "/app/data/downloads"
 		} else {
 			downloadsDir = h.cfg.DownloadsDir
 		}
@@ -385,8 +385,8 @@ func (h *Handlers) HandleMatchDownloads(c *fiber.Ctx) error {
 
 func (h *Handlers) HandleClearCSVs(c *fiber.Ctx) error {
 	csvDir := h.cfg.CSVDir
-	if fileExists("/app/csv") {
-		csvDir = "/app/csv"
+	if fileExists("/app/data/csv") {
+		csvDir = "/app/data/csv"
 	}
 
 	job := jobs.NewJob("clear_csvs", fiber.Map{
@@ -414,8 +414,8 @@ func (h *Handlers) HandleClearCSVs(c *fiber.Ctx) error {
 
 func (h *Handlers) HandleClearDownloads(c *fiber.Ctx) error {
 	downloadsDir := h.cfg.DownloadsDir
-	if fileExists("/app/downloads") {
-		downloadsDir = "/app/downloads"
+	if fileExists("/app/data/downloads") {
+		downloadsDir = "/app/data/downloads"
 	}
 
 	job := jobs.NewJob("clear_downloads", fiber.Map{
@@ -455,8 +455,8 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 
 	// Count CSV files (fast)
 	csvDir := h.cfg.CSVDir
-	if fileExists("/app/csv") {
-		csvDir = "/app/csv"
+	if fileExists("/app/data/csv") {
+		csvDir = "/app/data/csv"
 	}
 	csvFiles, err := filepath.Glob(filepath.Join(csvDir, "*.csv"))
 	if err == nil {
@@ -498,13 +498,13 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 	}
 
 	// Count downloads (with timeout)
-	done := make(chan bool, 1)
+	downloadsDone := make(chan bool, 1)
 	go func() {
 		var totalMP3s int
 		var downloadsDirSize int64
 		downloadsDir := h.cfg.DownloadsDir
-		if fileExists("/app/downloads") {
-			downloadsDir = "/app/downloads"
+		if fileExists("/app/data/downloads") {
+			downloadsDir = "/app/data/downloads"
 		}
 		_ = filepath.Walk(downloadsDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
@@ -515,10 +515,11 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 		})
 		stats["total_downloads"] = totalMP3s
 		stats["downloads_size_gb"] = float64(downloadsDirSize) / 1024 / 1024 / 1024
-		done <- true
+		downloadsDone <- true
 	}()
 
 	// Count NAS (with timeout) - only if directory exists
+	nasDone := make(chan bool, 1)
 	go func() {
 		var nasMP3s int
 		var nasDirSize int64
@@ -540,18 +541,18 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 		
 		stats["nas_downloads"] = nasMP3s
 		stats["nas_size_gb"] = float64(nasDirSize) / 1024 / 1024 / 1024
-		done <- true
+		nasDone <- true
 	}()
 
 	// Wait for downloads scan to complete (max 2 seconds)
 	select {
-	case <-done:
+	case <-downloadsDone:
 	case <-time.After(2 * time.Second):
 	}
 
 	// Wait for NAS scan to complete (max 3 seconds)
 	select {
-	case <-done:
+	case <-nasDone:
 	case <-time.After(3 * time.Second):
 	}
 
