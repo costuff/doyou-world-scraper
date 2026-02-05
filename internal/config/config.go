@@ -21,7 +21,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:        getEnvInt("PORT", 3001),
 		DataDir:     getEnv("DATA_DIR", "./data"),
-		NASPath:     getEnv("NAS_PATH", "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks"),
+		NASPath:     getEnv("NAS_PATH", "/nas"),
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 		Environment: getEnv("ENVIRONMENT", "development"),
 	}
