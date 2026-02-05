@@ -19,27 +19,21 @@ COPY pkg/ ./pkg/
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o api ./cmd/api
 
 # Runtime stage
-FROM alpine:latest
+FROM debian:bookworm-slim
 
-# Install build dependencies and runtime dependencies
-RUN apk add --no-cache \
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    tzdata \
     chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ttf-freefont \
+    chromium-driver \
     python3 \
-    py3-pip \
+    python3-pip \
     ffmpeg \
-    # Build dependencies for Python packages
-    gcc \
-    g++ \
-    musl-dev \
-    python3-dev \
-    openblas-dev \
-    gfortran
+    wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp \
+    && ln -sf /usr/local/bin/yt-dlp /usr/bin/yt-dlp
 
 WORKDIR /app
 
@@ -49,17 +43,14 @@ COPY --from=builder /build/api .
 # Copy Python analysis scripts
 COPY scripts/ ./scripts/
 
-# Install Python dependencies
+# Install Python dependencies (Debian has pre-built wheels for everything!)
 RUN pip3 install --no-cache-dir -r scripts/requirements.txt --break-system-packages
-
-# Remove build dependencies to reduce image size
-RUN apk del gcc g++ musl-dev python3-dev gfortran
 
 # Create data directories
 RUN mkdir -p /app/data/csv /app/data/downloads
 
 # Set environment variables for Chrome
-ENV CHROME_BIN=/usr/bin/chromium-browser \
+ENV CHROME_BIN=/usr/bin/chromium \
     CHROME_PATH=/usr/lib/chromium/ \
     PYTHONUNBUFFERED=1
 

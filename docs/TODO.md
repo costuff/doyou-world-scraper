@@ -42,6 +42,12 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] Music library analysis and visualization dashboard (PRIORITY 1)
 
 ### Music Metadata & Analysis (NEW - PRIORITY 1)
+- [ ] **FIX AUDIO ANALYSIS SEGFAULT (HIGHEST PRIORITY)** - librosa BPM extraction causing segmentation faults in Docker
+  - Current issue: librosa.beat.beat_track() and librosa.onset functions crash
+  - Tried: onset_strength + tempo method still segfaults
+  - Output parsing fails with invalid JSON character
+  - Need: Investigate librosa/numba/numpy compatibility in Docker, possibly use alternative BPM detection library
+  - Consider: essentia, aubio, or madmom for more stable audio analysis
 - [ ] **Advanced Metadata Extraction** - Extract comprehensive audio features from downloaded tracks:
   - Album name and artwork
   - Release date

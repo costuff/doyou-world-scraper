@@ -736,10 +736,12 @@ func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		// Find Python executable in venv
+		// Find Python executable (system python3 in Docker, venv locally)
 		pythonPath := filepath.Join(h.cfg.DataDir, "..", ".venv", "bin", "python")
-		if fileExists("/app/.venv/bin/python") {
-			pythonPath = "/app/.venv/bin/python"
+		if fileExists("/usr/bin/python3") {
+			pythonPath = "/usr/bin/python3"
+		} else if !fileExists(pythonPath) {
+			pythonPath = "python3"
 		}
 
 		scriptPath := filepath.Join(h.cfg.DataDir, "..", "scripts", "analyze_audio.py")
@@ -796,10 +798,12 @@ func (h *Handlers) HandleAnalyzeAll(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		// Find Python executable
+		// Find Python executable (system python3 in Docker, venv locally)
 		pythonPath := filepath.Join(h.cfg.DataDir, "..", ".venv", "bin", "python")
-		if fileExists("/app/.venv/bin/python") {
-			pythonPath = "/app/.venv/bin/python"
+		if fileExists("/usr/bin/python3") {
+			pythonPath = "/usr/bin/python3"
+		} else if !fileExists(pythonPath) {
+			pythonPath = "python3"
 		}
 
 		scriptPath := filepath.Join(h.cfg.DataDir, "..", "scripts", "analyze_audio.py")

@@ -14,8 +14,29 @@ from pathlib import Path
 import argparse
 import matplotlib.pyplot as plt
 from typing import Dict, Any, Optional
+import signal
+from functools import wraps
+
+# Timeout decorator
+def timeout(seconds=30):
+    def decorator(func):
+        def _handle_timeout(signum, frame):
+            raise TimeoutError(f"Function call timed out after {seconds} seconds")
+        
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            signal.signal(signal.SIGALRM, _handle_timeout)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+        return wrapper
+    return decorator
 
 
+@timeout(60)  # 60 second timeout for loading
 def extract_audio_features(file_path: str) -> Dict[str, Any]:
     """
     Extract comprehensive audio features from an audio file.
@@ -26,11 +47,15 @@ def extract_audio_features(file_path: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing all extracted features
     """
-    print(f"Analyzing: {file_path}")
+    print(f"Analyzing: {file_path}", flush=True)
     
-    # Load audio file
+    # Load audio file with timeout protection
     try:
-        y, sr = librosa.load(file_path, sr=None, duration=120)  # Analyze first 2 minutes
+        print("Loading audio file...", flush=True)
+        y, sr = librosa.load(file_path, sr=22050, duration=120, mono=True)  # Force 22.05kHz, mono
+        print(f"Audio loaded: {len(y)/sr:.1f}s at {sr}Hz", flush=True)
+    except TimeoutError as e:
+        return {"error": f"Audio loading timed out: {str(e)}"}
     except Exception as e:
         return {"error": f"Failed to load audio: {str(e)}"}
     
@@ -40,74 +65,82 @@ def extract_audio_features(file_path: str) -> Dict[str, Any]:
         "duration_seconds": float(librosa.get_duration(y=y, sr=sr))
     }
     
+    # BPM (Tempo) - Use simpler onset-based method to avoid segfaults
     try:
-        # BPM (Tempo)
-        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        print("Extracting BPM...", flush=True)
+        # Use onset strength instead of full beat tracking (more stable)
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        tempo = librosa.beat.tempo(onset_envelope=onset_env, sr=sr)[0]
         features["bpm"] = float(tempo)
-        
-        # Key detection (Chroma-based)
+        print(f"BPM: {tempo:.1f}", flush=True)
+    except Exception as e:
+        print(f"BPM extraction failed: {e}", flush=True)
+        features["bpm"] = None
+        features["bpm_error"] = str(e)
+    
+    # Key detection (Chroma-based)
+    try:
+        print("Detecting key...", flush=True)
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
         key_index = np.argmax(np.sum(chroma, axis=1))
         keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
         features["key"] = keys[key_index]
-        
-        # Spectral features
+        print(f"Key: {features['key']}", flush=True)
+    except Exception as e:
+        print(f"Key detection failed: {e}", flush=True)
+        features["key"] = None
+        features["key_error"] = str(e)
+    
+    # Spectral features
+    try:
+        print("Extracting spectral features...", flush=True)
         spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
         features["spectral_centroid_mean"] = float(np.mean(spectral_centroids))
         features["spectral_centroid_std"] = float(np.std(spectral_centroids))
         
         spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
         features["spectral_rolloff_mean"] = float(np.mean(spectral_rolloff))
-        
-        # Zero crossing rate (useful for percussion/noise detection)
+        print("Spectral features extracted", flush=True)
+    except Exception as e:
+        print(f"Spectral features failed: {e}", flush=True)
+        features["spectral_error"] = str(e)
+    
+    # Zero crossing rate
+    try:
+        print("Calculating zero crossing rate...", flush=True)
         zcr = librosa.feature.zero_crossing_rate(y)[0]
         features["zero_crossing_rate_mean"] = float(np.mean(zcr))
-        
-        # RMS Energy
+        print("ZCR calculated", flush=True)
+    except Exception as e:
+        print(f"ZCR failed: {e}", flush=True)
+        features["zcr_error"] = str(e)
+    
+    # RMS Energy
+    try:
+        print("Calculating RMS energy...", flush=True)
         rms = librosa.feature.rms(y=y)[0]
         features["rms_energy_mean"] = float(np.mean(rms))
         features["rms_energy_std"] = float(np.std(rms))
-        
-        # MFCC (Mel-frequency cepstral coefficients) - captures timbre
+        print("RMS energy calculated", flush=True)
+    except Exception as e:
+        print(f"RMS energy failed: {e}", flush=True)
+        features["rms_error"] = str(e)
+    
+    # MFCC (Mel-frequency cepstral coefficients)
+    try:
+        print("Extracting MFCCs...", flush=True)
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         for i in range(13):
             features[f"mfcc_{i}_mean"] = float(np.mean(mfccs[i]))
             features[f"mfcc_{i}_std"] = float(np.std(mfccs[i]))
-        
-        # Derived features (Shazam-style)
-        # Energy: Based on RMS and spectral features
-        features["energy"] = float(np.clip(features["rms_energy_mean"] * 2, 0, 1))
-        
-        # Danceability: Based on tempo stability and rhythm
-        tempo_stability = 1.0 - min(float(np.std(_[0])) / 100 if _ else 0 
-                                     for _ in [librosa.beat.beat_track(y=y, sr=sr)])
-        features["danceability"] = float(np.clip(tempo_stability, 0, 1))
-        
-        # Acousticness: Lower spectral centroid suggests more acoustic
-        features["acousticness"] = float(np.clip(1.0 - (features["spectral_centroid_mean"] / 5000), 0, 1))
-        
-        # Instrumentalness: Based on spectral characteristics
-        features["instrumentalness"] = float(np.clip(1.0 - features["zero_crossing_rate_mean"] * 2, 0, 1))
-        
-        # Valence: Simplified - based on major/minor and energy
-        major_minor_ratio = float(np.sum(chroma[[0, 4, 7], :]) / np.sum(chroma))
-        features["valence"] = float(np.clip(major_minor_ratio * 1.2, 0, 1))
-        
-        # Speechiness: Higher zero crossing rate suggests speech
-        features["speechiness"] = float(np.clip(features["zero_crossing_rate_mean"] * 3, 0, 1))
-        
-        # Liveness: Simplified - based on dynamics variation
-        features["liveness"] = float(np.clip(features["rms_energy_std"] * 5, 0, 1))
-        
-        # Melodicness: Based on harmonic content
-        harmonic, _ = librosa.effects.hpss(y)
-        harmonic_ratio = float(np.sum(np.abs(harmonic)) / (np.sum(np.abs(y)) + 1e-8))
-        features["melodicness"] = float(np.clip(harmonic_ratio, 0, 1))
-        
+        print("MFCCs extracted", flush=True)
     except Exception as e:
-        features["analysis_error"] = str(e)
+        print(f"MFCC extraction failed: {e}", flush=True)
+        features["mfcc_error"] = str(e)
     
+    print("Analysis complete", flush=True)
     return features
+
 
 
 def generate_spectrogram(file_path: str, output_path: Optional[str] = None) -> Optional[str]:

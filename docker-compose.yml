@@ -11,7 +11,7 @@ services:
     volumes:
       - ./data/csv:/app/data/csv
       - ./data/downloads:/app/data/downloads
-      - ${NAS_PATH:-/mnt/music}:/nas
+      - /Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks:/nas
     environment:
       - PORT=3000
       - DATA_DIR=/app/data
@@ -19,6 +19,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ENVIRONMENT=production
       - TZ=${TZ:-Europe/Athens}
+      - CHROME_BIN=/usr/bin/chromium
+      - CHROMIUM_FLAGS=--no-sandbox --disable-gpu --disable-dev-shm-usage
     networks:
       - doyou-network
     cap_add:

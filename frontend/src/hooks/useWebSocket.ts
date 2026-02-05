@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Job, WSMessage } from '../types';
 import { apiService } from '../services/api';
 
-const WS_URL = 'ws://localhost:3001/api/v1/ws';
+const WS_URL = 'ws://localhost:3000/api/v1/ws';
 
 export const useWebSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
