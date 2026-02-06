@@ -2,7 +2,20 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Job, WSMessage } from '../types';
 import { apiService } from '../services/api';
 
-const WS_URL = 'ws://localhost:3000/api/v1/ws';
+// Dynamically determine WebSocket URL based on environment
+const getWebSocketURL = () => {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  
+  // Use current host for production, localhost for development
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    return 'ws://localhost:3000/api/v1/ws';
+  }
+  
+  return `${protocol}//${host}/api/v1/ws`;
+};
+
+const WS_URL = getWebSocketURL();
 
 export const useWebSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
