@@ -148,6 +148,89 @@ def extract_audio_features(file_path: str, quiet: bool = False) -> Dict[str, Any
         log(f"MFCC extraction failed: {e}")
         features["mfcc_error"] = str(e)
     
+    # High-level Spotify-like features (computed from low-level features)
+    try:
+        log("Computing high-level features...")
+        
+        # Energy: Normalized RMS energy (0-1)
+        if "rms_energy_mean" in features:
+            # Normalize RMS to 0-1 range (typical RMS is 0-0.5 for music)
+            features["energy"] = float(min(1.0, features["rms_energy_mean"] * 2.5))
+        else:
+            features["energy"] = 0.0
+        
+        # Danceability: Based on tempo and beat strength
+        if "bpm" in features and features["bpm"]:
+            # Optimal dance BPM is 120-130, normalize around that
+            bpm = features["bpm"]
+            dance_score = 1.0 - abs(bpm - 125) / 125  # Peak at 125 BPM
+            dance_score = max(0.0, min(1.0, dance_score * 1.2))  # Scale and clamp
+            features["danceability"] = float(dance_score)
+        else:
+            features["danceability"] = 0.5
+        
+        # Valence: Based on spectral brightness and energy (mood/happiness)
+        if "spectral_centroid_mean" in features:
+            # Brighter sound (higher centroid) = more positive valence
+            centroid_norm = min(1.0, features["spectral_centroid_mean"] / 4000)
+            energy_factor = features.get("energy", 0.5)
+            features["valence"] = float((centroid_norm * 0.6 + energy_factor * 0.4))
+        else:
+            features["valence"] = 0.5
+        
+        # Acousticness: Inverse of spectral rolloff (0-1)
+        if "spectral_rolloff_mean" in features:
+            # Lower rolloff = more acoustic
+            rolloff_norm = min(1.0, features["spectral_rolloff_mean"] / 8000)
+            features["acousticness"] = float(1.0 - rolloff_norm)
+        else:
+            features["acousticness"] = 0.5
+        
+        # Instrumentalness: Based on zero crossing rate
+        # High ZCR suggests more instrumental content (less vocals)
+        if "zero_crossing_rate_mean" in features:
+            zcr_norm = min(1.0, features["zero_crossing_rate_mean"] * 5)
+            features["instrumentalness"] = float(zcr_norm * 0.7)  # Scale down
+        else:
+            features["instrumentalness"] = 0.5
+        
+        # Speechiness: Inverse of instrumentalness with RMS variance
+        if "rms_energy_std" in features:
+            # High RMS variance suggests more speech-like dynamics
+            rms_var_norm = min(1.0, features["rms_energy_std"] * 5)
+            features["speechiness"] = float(rms_var_norm * 0.6)
+        else:
+            features["speechiness"] = 1.0 - features.get("instrumentalness", 0.5)
+        
+        # Liveness: Based on RMS energy variance (live = more dynamic)
+        if "rms_energy_std" in features and "rms_energy_mean" in features:
+            # High variance relative to mean = more live feel
+            variance_ratio = features["rms_energy_std"] / max(0.01, features["rms_energy_mean"])
+            features["liveness"] = float(min(1.0, variance_ratio * 0.8))
+        else:
+            features["liveness"] = 0.3
+        
+        # Melodicness: Based on chroma consistency (harmonic content)
+        # Higher spectral centroid with lower variance = more melodic
+        if "spectral_centroid_mean" in features and "spectral_centroid_std" in features:
+            centroid_consistency = 1.0 - min(1.0, features["spectral_centroid_std"] / 2000)
+            features["melodicness"] = float(centroid_consistency * 0.8)
+        else:
+            features["melodicness"] = 0.5
+        
+        log("High-level features computed")
+    except Exception as e:
+        log(f"High-level feature computation failed: {e}")
+        # Set defaults if computation fails
+        features["energy"] = 0.5
+        features["danceability"] = 0.5
+        features["valence"] = 0.5
+        features["acousticness"] = 0.5
+        features["instrumentalness"] = 0.5
+        features["speechiness"] = 0.5
+        features["liveness"] = 0.3
+        features["melodicness"] = 0.5
+    
     log("Analysis complete")
     return features
 
