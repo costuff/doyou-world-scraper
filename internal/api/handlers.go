@@ -736,12 +736,15 @@ func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		// Find Python executable (system python3 in Docker, venv locally)
+		// Find Python executable (venv locally, system python3 in Docker)
 		pythonPath := filepath.Join(h.cfg.DataDir, "..", ".venv", "bin", "python")
-		if fileExists("/usr/bin/python3") {
-			pythonPath = "/usr/bin/python3"
-		} else if !fileExists(pythonPath) {
-			pythonPath = "python3"
+		if !fileExists(pythonPath) {
+			// In Docker or no venv available
+			if fileExists("/usr/bin/python3") {
+				pythonPath = "/usr/bin/python3"
+			} else {
+				pythonPath = "python3"
+			}
 		}
 
 		scriptPath := filepath.Join(h.cfg.DataDir, "..", "scripts", "analyze_audio.py")
@@ -750,7 +753,7 @@ func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
 		}
 
 		// Run Python analysis script
-		cmd := exec.Command(pythonPath, scriptPath, "--single", req.FilePath)
+		cmd := exec.Command(pythonPath, scriptPath, "--single", "--quiet", req.FilePath)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			job.Fail(fmt.Sprintf("Analysis failed: %v - %s", err, string(output)))
@@ -760,7 +763,7 @@ func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
 		// Parse JSON output
 		var analysis map[string]interface{}
 		if err := json.Unmarshal(output, &analysis); err != nil {
-			job.Fail(fmt.Sprintf("Failed to parse analysis results: %v", err))
+			job.Fail(fmt.Sprintf("Failed to parse analysis results: %v - Output: %s", err, string(output)))
 			return
 		}
 
@@ -798,12 +801,15 @@ func (h *Handlers) HandleAnalyzeAll(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		// Find Python executable (system python3 in Docker, venv locally)
+		// Find Python executable (venv locally, system python3 in Docker)
 		pythonPath := filepath.Join(h.cfg.DataDir, "..", ".venv", "bin", "python")
-		if fileExists("/usr/bin/python3") {
-			pythonPath = "/usr/bin/python3"
-		} else if !fileExists(pythonPath) {
-			pythonPath = "python3"
+		if !fileExists(pythonPath) {
+			// In Docker or no venv available
+			if fileExists("/usr/bin/python3") {
+				pythonPath = "/usr/bin/python3"
+			} else {
+				pythonPath = "python3"
+			}
 		}
 
 		scriptPath := filepath.Join(h.cfg.DataDir, "..", "scripts", "analyze_audio.py")

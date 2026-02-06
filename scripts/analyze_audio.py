@@ -7,6 +7,11 @@ Extracts BPM, key, audio features, and generates spectrograms from MP3 files.
 import os
 import sys
 import json
+import warnings
+
+# Suppress all warnings (including FutureWarnings from librosa)
+warnings.filterwarnings('ignore')
+
 import librosa
 import numpy as np
 import soundfile as sf
@@ -37,23 +42,28 @@ def timeout(seconds=30):
 
 
 @timeout(60)  # 60 second timeout for loading
-def extract_audio_features(file_path: str) -> Dict[str, Any]:
+def extract_audio_features(file_path: str, quiet: bool = False) -> Dict[str, Any]:
     """
     Extract comprehensive audio features from an audio file.
     
     Args:
         file_path: Path to the audio file
+        quiet: If True, suppress progress messages (only output JSON)
         
     Returns:
         Dictionary containing all extracted features
     """
-    print(f"Analyzing: {file_path}", flush=True)
+    def log(msg):
+        if not quiet:
+            print(msg, file=sys.stderr, flush=True)
+    
+    log(f"Analyzing: {file_path}")
     
     # Load audio file with timeout protection
     try:
-        print("Loading audio file...", flush=True)
+        log("Loading audio file...")
         y, sr = librosa.load(file_path, sr=22050, duration=120, mono=True)  # Force 22.05kHz, mono
-        print(f"Audio loaded: {len(y)/sr:.1f}s at {sr}Hz", flush=True)
+        log(f"Audio loaded: {len(y)/sr:.1f}s at {sr}Hz")
     except TimeoutError as e:
         return {"error": f"Audio loading timed out: {str(e)}"}
     except Exception as e:
@@ -67,78 +77,78 @@ def extract_audio_features(file_path: str) -> Dict[str, Any]:
     
     # BPM (Tempo) - Use simpler onset-based method to avoid segfaults
     try:
-        print("Extracting BPM...", flush=True)
+        log("Extracting BPM...")
         # Use onset strength instead of full beat tracking (more stable)
         onset_env = librosa.onset.onset_strength(y=y, sr=sr)
         tempo = librosa.beat.tempo(onset_envelope=onset_env, sr=sr)[0]
         features["bpm"] = float(tempo)
-        print(f"BPM: {tempo:.1f}", flush=True)
+        log(f"BPM: {tempo:.1f}")
     except Exception as e:
-        print(f"BPM extraction failed: {e}", flush=True)
+        log(f"BPM extraction failed: {e}")
         features["bpm"] = None
         features["bpm_error"] = str(e)
     
     # Key detection (Chroma-based)
     try:
-        print("Detecting key...", flush=True)
+        log("Detecting key...")
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
         key_index = np.argmax(np.sum(chroma, axis=1))
         keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
         features["key"] = keys[key_index]
-        print(f"Key: {features['key']}", flush=True)
+        log(f"Key: {features['key']}")
     except Exception as e:
-        print(f"Key detection failed: {e}", flush=True)
+        log(f"Key detection failed: {e}")
         features["key"] = None
         features["key_error"] = str(e)
     
     # Spectral features
     try:
-        print("Extracting spectral features...", flush=True)
+        log("Extracting spectral features...")
         spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
         features["spectral_centroid_mean"] = float(np.mean(spectral_centroids))
         features["spectral_centroid_std"] = float(np.std(spectral_centroids))
         
         spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
         features["spectral_rolloff_mean"] = float(np.mean(spectral_rolloff))
-        print("Spectral features extracted", flush=True)
+        log("Spectral features extracted")
     except Exception as e:
-        print(f"Spectral features failed: {e}", flush=True)
+        log(f"Spectral features failed: {e}")
         features["spectral_error"] = str(e)
     
     # Zero crossing rate
     try:
-        print("Calculating zero crossing rate...", flush=True)
+        log("Calculating zero crossing rate...")
         zcr = librosa.feature.zero_crossing_rate(y)[0]
         features["zero_crossing_rate_mean"] = float(np.mean(zcr))
-        print("ZCR calculated", flush=True)
+        log("ZCR calculated")
     except Exception as e:
-        print(f"ZCR failed: {e}", flush=True)
+        log(f"ZCR failed: {e}")
         features["zcr_error"] = str(e)
     
     # RMS Energy
     try:
-        print("Calculating RMS energy...", flush=True)
+        log("Calculating RMS energy...")
         rms = librosa.feature.rms(y=y)[0]
         features["rms_energy_mean"] = float(np.mean(rms))
         features["rms_energy_std"] = float(np.std(rms))
-        print("RMS energy calculated", flush=True)
+        log("RMS energy calculated")
     except Exception as e:
-        print(f"RMS energy failed: {e}", flush=True)
+        log(f"RMS energy failed: {e}")
         features["rms_error"] = str(e)
     
     # MFCC (Mel-frequency cepstral coefficients)
     try:
-        print("Extracting MFCCs...", flush=True)
+        log("Extracting MFCCs...")
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         for i in range(13):
             features[f"mfcc_{i}_mean"] = float(np.mean(mfccs[i]))
             features[f"mfcc_{i}_std"] = float(np.std(mfccs[i]))
-        print("MFCCs extracted", flush=True)
+        log("MFCCs extracted")
     except Exception as e:
-        print(f"MFCC extraction failed: {e}", flush=True)
+        log(f"MFCC extraction failed: {e}")
         features["mfcc_error"] = str(e)
     
-    print("Analysis complete", flush=True)
+    log("Analysis complete")
     return features
 
 
@@ -241,16 +251,18 @@ def main():
                        help='Generate spectrogram images')
     parser.add_argument('--single', action='store_true',
                        help='Analyze single file and print to stdout')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                       help='Suppress progress messages (only output JSON)')
     
     args = parser.parse_args()
     
     if not os.path.exists(args.input):
-        print(f"Error: {args.input} does not exist")
+        print(f"Error: {args.input} does not exist", file=sys.stderr)
         sys.exit(1)
     
     if args.single or os.path.isfile(args.input):
         # Analyze single file
-        features = extract_audio_features(args.input)
+        features = extract_audio_features(args.input, quiet=args.quiet)
         print(json.dumps(features, indent=2))
         
         if args.spectrogram:
