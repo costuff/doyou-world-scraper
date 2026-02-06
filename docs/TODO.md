@@ -43,12 +43,25 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] **Version footer** - Add footer component showing deployed backend and frontend versions for version tracking
 
 ### Music Metadata & Analysis (NEW - PRIORITY 1)
-- [ ] **FIX AUDIO ANALYSIS SEGFAULT (HIGHEST PRIORITY)** - librosa BPM extraction causing segmentation faults in Docker
-  - Current issue: librosa.beat.beat_track() and librosa.onset functions crash
-  - Tried: onset_strength + tempo method still segfaults
-  - Output parsing fails with invalid JSON character
-  - Need: Investigate librosa/numba/numpy compatibility in Docker, possibly use alternative BPM detection library
-  - Consider: essentia, aubio, or madmom for more stable audio analysis
+- [x] **FIX AUDIO ANALYSIS JSON PARSING** - Fixed librosa warnings and Python path detection
+  - Issue: librosa FutureWarning going to stdout, breaking JSON parsing
+  - Solution: Suppressed warnings, redirected progress to stderr, added --quiet flag
+  - Result: Audio analysis returns valid JSON with all features (BPM, key, energy, etc.)
+- [x] **High-level Audio Features** - Compute Spotify-like features from low-level audio data
+  - Energy, Danceability, Valence, Acousticness, Instrumentalness, Speechiness, Liveness, Melodicness
+  - All normalized to 0-1 range matching frontend expectations
+- [ ] **PostgreSQL Background Analysis Worker (PRIORITY 1)** - Process entire library in background
+  - Add PostgreSQL to docker-compose.yml
+  - Create tracks table schema (id, file_path, file_name, analyzed_at, bpm, key, duration, all audio features)
+  - Background worker endpoint: POST /api/v1/analysis/start-background
+  - Scans downloads folder, queues unanalyzed tracks
+  - Analyzes tracks sequentially or in parallel batches
+  - Stores results in PostgreSQL for instant frontend queries
+  - New endpoints:
+    - GET /api/v1/tracks?filter=analyzed - List all analyzed tracks
+    - GET /api/v1/tracks/:id/analysis - Get cached analysis
+    - GET /api/v1/analysis/stats - Show progress (X/9875 analyzed)
+  - **CV Keywords**: PostgreSQL, background workers, batch processing, database schema design
 - [ ] **Advanced Metadata Extraction** - Extract comprehensive audio features from downloaded tracks:
   - Album name and artwork
   - Release date
