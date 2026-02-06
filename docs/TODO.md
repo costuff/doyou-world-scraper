@@ -40,6 +40,7 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Fix frontend not updating properly - Optimized stats refresh (30s→5s), removed expensive JSON comparisons, added React.memo
 - [ ] Browse downloaded tracks, search/filter by metadata/genre (PRIORITY 1)
 - [ ] Music library analysis and visualization dashboard (PRIORITY 1)
+- [ ] **Version footer** - Add footer component showing deployed backend and frontend versions for version tracking
 
 ### Music Metadata & Analysis (NEW - PRIORITY 1)
 - [ ] **FIX AUDIO ANALYSIS SEGFAULT (HIGHEST PRIORITY)** - librosa BPM extraction causing segmentation faults in Docker
