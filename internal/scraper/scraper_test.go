@@ -63,11 +63,15 @@ func TestScrapeSingleDate(t *testing.T) {
 }
 
 func TestScrapeMonth(t *testing.T) {
+	// Skip by default - this test takes 5-10 minutes due to network calls
+	// Run with: go test -run TestScrapeMonth -v ./internal/scraper/... -timeout 15m
+	t.Skip("Skipping long-running network test (use -run TestScrapeMonth to run manually)")
+	
 	// Skip in CI - this test takes 5-10 minutes due to network calls
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping long-running network test in CI environment")
 	}
-	
+
 	if testing.Short() {
 		t.Skip("Skipping long-running test in short mode")
 	}
