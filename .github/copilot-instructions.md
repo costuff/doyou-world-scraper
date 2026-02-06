@@ -19,13 +19,15 @@ This is a full-stack music scraper and management system for DoYou World Radio. 
 doyou-world-scraper/
 ├── cmd/
 │   └── api/                # API server entry point
-│       └── main.go         # Application bootstrap with dependency injection
+│       ├── main.go         # Application bootstrap with dependency injection
+│       └── main_test.go    # (1 test)
 ├── internal/               # Private application code
 │   ├── api/                # HTTP handlers and routes
 │   │   ├── handlers.go     # HTTP request handlers (Handlers struct with methods)
 │   │   └── handlers_test.go # Handler tests (18 tests)
 │   ├── config/             # Configuration management
-│   │   └── config.go       # Config struct, Load(), Validate(), EnsureDirectories()
+│   │   ├── config.go       # Config struct, Load(), Validate(), EnsureDirectories()
+│   │   └── config_test.go  # (18 tests, 96.4% coverage)
 │   ├── downloader/         # Track downloading logic
 │   │   ├── downloader.go   # DownloadFromCSV, DownloadFromFolder
 │   │   └── downloader_test.go # (79 tests)
@@ -41,7 +43,8 @@ doyou-world-scraper/
 │       └── utilities_test.go # (9 tests)
 ├── pkg/                    # Public/reusable packages
 │   └── logger/             # Structured logging
-│       └── logger.go       # Zerolog wrapper with Init(), Info(), Error(), Debug(), etc.
+│       ├── logger.go       # Zerolog wrapper with Init(), Info(), Error(), Debug(), etc.
+│       └── logger_test.go  # (13 tests, 74.1% coverage)
 ├── frontend/               # React frontend dashboard
 │   ├── src/
 │   │   ├── components/     # React components (JobCard, ScrapeControls, etc.)
@@ -168,7 +171,7 @@ cd frontend && npm run dev
 3. **Write minimal code** to make the test pass
 4. **Run test and verify it passes**
 5. **Refactor** if needed while keeping tests green
-6. **Update test stats** in line 29 of this file (test count and coverage %)
+6. **Update test stats** in the documentation (test count and coverage %)
 7. **Commit** with test and implementation together
 
 **Test Coverage Goals:**
@@ -194,7 +197,15 @@ cd frontend && npm run dev
 - Run: `go test ./internal/... ./api/...`
 - Coverage: `go test -cover ./internal/... ./api/...`
 - Count tests: `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"`
-- **Current Stats**: 210 tests passing, ~60% coverage
+- **Current Stats**: 239 tests passing (157 test cases + subtests), ~61.5% average coverage
+  - cmd/api: 1 test, 0.0% (main not testable)
+  - internal/api: 18 tests, 44.9%
+  - internal/config: 18 tests, 96.4%
+  - internal/downloader: 79 tests, 69.7%
+  - internal/jobs: 13 tests, 53.7%
+  - internal/scraper: 3 tests, 60.3%
+  - internal/storage: 94 tests, 53.2%
+  - pkg/logger: 13 tests, 74.1%
 
 **When Adding Features:**
 1. Write tests first (TDD approach preferred)
@@ -208,7 +219,7 @@ cd frontend && npm run dev
 - **ALWAYS update test coverage statistics** after adding/modifying tests
 - Run `go test -cover ./internal/... ./api/...` to get coverage percentage
 - Run `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"` to count total tests
-- Update format: `# 210 tests passing, ~60% coverage`
+- Update format: `# 239 tests passing (157 test cases), ~61.5% coverage`
 - Keep API documentation in `api/README.md` synchronized with actual endpoints
 - Update `docs/TODO.md` when completing tasks or adding new ones
 
