@@ -112,13 +112,11 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] **CV Keywords**: Event-driven, microservices, pub/sub, message queue, PostgreSQL, Redis, async processing
 
 ## Next Steps Priority Order
-1. **Fix Chromium Process Cleanup** - Ensure browser processes are properly terminated (PRIORITY 1)
-2. **Music Library Analysis & Visualization** - Advanced metadata extraction + interactive graphs/charts (separate repo)
-3. **Browse/Search UI** - Track library with search/filter/play functionality
-4. **PostgreSQL Integration** - Replace in-memory storage with persistent database
-5. **Event-Driven Architecture** - Redis pub/sub for analytics integration
-6. **Docker Deployment** - Package for Raspberry Pi/CasaOS deployment
-7. **Authentication** - User login and access control
+1. **Version Footer** - Display backend/frontend versions in UI footer for deployment tracking (Quick Win)
+2. **Browse/Search Tracks UI** - Track library page with search/filter by BPM, key, energy, etc.
+3. **PostgreSQL Background Analysis Worker** - Process entire library, cache results in database
+4. **Music Library Visualization Dashboard** - Interactive graphs (Energy vs Danceability, BPM distribution, etc.)
+5. **Event-Driven Architecture with Redis** - Microservices with pub/sub messaging for async processing
 
 ## Code Quality & Architecture Improvements
 
