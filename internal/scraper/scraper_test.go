@@ -63,6 +63,11 @@ func TestScrapeSingleDate(t *testing.T) {
 }
 
 func TestScrapeMonth(t *testing.T) {
+	// Skip in CI - this test takes 5-10 minutes due to network calls
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping long-running network test in CI environment")
+	}
+	
 	if testing.Short() {
 		t.Skip("Skipping long-running test in short mode")
 	}
