@@ -26,7 +26,21 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Increase test coverage to 56.2% (up from 50.3%)
 - [x] Fix download progress tracking - Progress now updates per song with granular tracking (105 tests, 61.4% coverage)
 - [x] Add detailed job messages - Jobs now show "Downloading: Track Name - Artist" with real-time updates
-- [ ] **Increase test coverage to 80%+** - Add comprehensive unit and integration tests (currently at 57.9%)
+- [x] NAS path detection tests - Comprehensive tests for Docker/local deployment scenarios (19 tests)
+- [ ] **🔴 FIX CHROME CRASHES (PRIORITY 1 - CRITICAL)** - Memory leaks causing Chrome to crash during scraping
+  - **Issue**: Reusing Chrome context across multiple pages accumulates 2-3GB memory, causing crashes
+  - **Fix 1**: Create new context per date (not per month/year) for immediate cleanup
+  - **Fix 2**: Add 30s timeouts to all chromedp operations (prevent hanging contexts)
+  - **Fix 3**: Add Chrome memory limit flags (disable-images, disk-cache-size=1, etc.)
+  - **Fix 4**: Limit concurrent scraping jobs with semaphore (max 2 Chrome instances)
+  - **Fix 5**: Improve job cancellation to force immediate Chrome cleanup
+  - **See**: docs/CHROME_CRASH_FIX.md for detailed analysis and implementation guide
+  - **Expected Result**: Stable memory usage (~200-500MB), no crashes, responsive cancellation
+- [ ] **Backend Test Coverage to 80%+ (PRIORITY 2)** - Currently at 61.5% average (229 test cases)
+  - internal/api: 51.8% → 80%+ (add handler tests for error cases, edge cases, WebSocket scenarios)
+  - internal/jobs: 53.7% → 80%+ (add job cleanup, cancellation, failure scenario tests)
+  - internal/storage: 53.2% → 80%+ (add utility function tests for file operations, NAS operations)
+  - internal/scraper: 60.3% → 80%+ (add scraper tests for malformed HTML, network failures, date edge cases)
 - [ ] **Fix golangci-lint configuration** - .golangci.yml has invalid 'skip-dirs' property for v1.64, need to update config or find alternative to exclude legacy scripts
 - [ ] **Fix all errcheck linting violations** - Add proper error checking throughout codebase (currently disabled in CI)
 - [ ] Document development workflow for faster iteration without Docker rebuilds
@@ -39,8 +53,8 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Statistics dashboard (track counts, storage usage, date ranges)
 - [x] Fix frontend not updating properly - Optimized stats refresh (30s→5s), removed expensive JSON comparisons, added React.memo
 - [x] **Version footer** - Add footer component showing deployed backend and frontend versions for version tracking
-- [ ] Browse downloaded tracks, search/filter by metadata/genre (PRIORITY 1)
-- [ ] Music library analysis and visualization dashboard (PRIORITY 1)
+- [ ] **Frontend Test Suite (PRIORITY 3)** - Install Vitest + React Testing Library + jsdom, add comprehensive tests for all components, hooks, and services (currently 0% coverage)
+- [ ] Music library analysis and visualization dashboard (PRIORITY 4 - graph-based browsing)
 
 ### Music Metadata & Analysis (NEW - PRIORITY 1)
 - [x] **FIX AUDIO ANALYSIS JSON PARSING** - Fixed librosa warnings and Python path detection
@@ -50,7 +64,7 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] **High-level Audio Features** - Compute Spotify-like features from low-level audio data
   - Energy, Danceability, Valence, Acousticness, Instrumentalness, Speechiness, Liveness, Melodicness
   - All normalized to 0-1 range matching frontend expectations
-- [ ] **PostgreSQL Background Analysis Worker (PRIORITY 1)** - Process entire library in background
+- [ ] **PostgreSQL Background Analysis Worker (PRIORITY 4)** - Process entire library in background
   - Add PostgreSQL to docker-compose.yml
   - Create tracks table schema (id, file_path, file_name, analyzed_at, bpm, key, duration, all audio features)
   - Background worker endpoint: POST /api/v1/analysis/start-background
@@ -112,10 +126,24 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] **CV Keywords**: Event-driven, microservices, pub/sub, message queue, PostgreSQL, Redis, async processing
 
 ## Next Steps Priority Order
-1. **Browse/Search Tracks UI** - Track library page with search/filter by BPM, key, energy, etc. (PRIORITY 1)
-2. **PostgreSQL Background Analysis Worker** - Process entire library, cache results in database
-3. **Music Library Visualization Dashboard** - Interactive graphs (Energy vs Danceability, BPM distribution, etc.)
-4. **Event-Driven Architecture with Redis** - Microservices with pub/sub messaging for async processing
+1. **🔴 FIX CHROME CRASHES (PRIORITY 1 - CRITICAL)** - Memory leaks causing scraper crashes during month/year scrapes
+   - Create new Chrome context per date (not reusing across pages) for immediate cleanup
+   - Add 30s timeouts to prevent hanging contexts
+   - Configure Chrome with memory limits (disable-images, minimal cache)
+   - Limit concurrent scraping jobs (max 2 Chrome instances with semaphore)
+   - Improve job cancellation to force immediate Chrome cleanup
+   - **See**: docs/CHROME_CRASH_FIX.md for detailed implementation guide
+2. **🧪 Comprehensive Test Coverage (PRIORITY 2)** - Increase test coverage from 61.5% to 80%+ to prevent runtime errors
+   - Backend: Add tests for internal/api (51.8%), internal/jobs (53.7%), internal/storage (53.2%), internal/scraper (60.3%)
+   - Frontend: Set up Vitest + React Testing Library, add tests for components and hooks (currently 0%)
+   - Integration tests: WebSocket connections, API endpoints end-to-end, Docker deployment scenarios
+   - Error scenarios: Network failures, invalid inputs, edge cases that caused previous bugs
+3. **Music Library Visualization Dashboard (PRIORITY 3)** - Interactive graphs with audio features
+   - Energy vs Danceability scatter plots, BPM distribution histogram, Key/mode distribution
+   - Graph-based navigation/browsing replaces traditional track list UI
+   - Click nodes to play tracks, filter by audio features visually
+4. **PostgreSQL Background Analysis Worker (PRIORITY 4)** - Process entire library, cache results in database
+5. **Event-Driven Architecture with Redis (PRIORITY 5)** - Microservices with pub/sub messaging for async processing
 
 ## Code Quality & Architecture Improvements
 
