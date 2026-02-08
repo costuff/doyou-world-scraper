@@ -336,16 +336,29 @@ curl -X POST http://localhost:3001/api/v1/jobs/$JOB_ID/cancel
 
 ## Implementation Priority
 
-### Phase 1: Critical Fixes (Do First) ��
-1. ✅ **Fix 1**: Add context cleanup between pages (prevents memory leaks)
-2. ✅ **Fix 2**: Add timeouts to chromedp operations (prevents hanging)
-3. ✅ **Fix 3**: Add Chrome memory limit flags (resource management)
+### Phase 1: Critical Fixes (Do First) ✅ **COMPLETED**
+1. ✅ **Fix 1**: Add context cleanup between pages (prevents memory leaks) - **DONE**
+2. ✅ **Fix 2**: Add timeouts to chromedp operations (prevents hanging) - **DONE**
+3. ✅ **Fix 3**: Add Chrome memory limit flags (resource management) - **DONE**
 
+**Status**: ✅ **COMPLETED** (Commit: a96be0c)
 **Estimated Impact**: Reduces memory usage by 80%, prevents crashes
+**Actual Implementation**:
+- Created `createChromeAllocator()` helper with 11 memory-optimized flags
+- ScrapeMonth and ScrapeYear now create new context per date with immediate cleanup
+- Added 30s timeouts to all chromedp operations with clear error messages
+- 8 new tests added in scraper_resource_test.go (all passing)
+- Expected: Chrome memory stays constant ~200-500MB instead of growing to 3GB+
 
-### Phase 2: Performance Improvements (Do Second)
-4. **Fix 4**: Limit concurrent scraping (semaphore)
-5. **Fix 5**: Improve job cancellation (immediate cleanup)
+**Test Results**: ✅ All tests passing
+```bash
+go test -v ./internal/scraper/... -short
+# 8 tests, 3 skip in short mode (network tests), 0 failures
+```
+
+### Phase 2: Performance Improvements (Do Second) 🔄 **NEXT**
+4. **Fix 4**: Limit concurrent scraping (semaphore) - ⏳ **TODO**
+5. **Fix 5**: Improve job cancellation (immediate cleanup) - ⏳ **TODO**
 
 **Estimated Impact**: Better system stability, faster response to user actions
 
