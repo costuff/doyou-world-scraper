@@ -29,7 +29,7 @@ func TestNASPathDetection(t *testing.T) {
 				// Simulate Docker: create /nas directory in test
 				nasPath := filepath.Join(tmpDir, "nas")
 				os.MkdirAll(nasPath, 0755)
-				
+
 				cfg := &config.Config{
 					Port:         0,
 					DataDir:      tmpDir,
@@ -52,7 +52,7 @@ func TestNASPathDetection(t *testing.T) {
 			setupFunc: func(tmpDir string) *config.Config {
 				nasPath := filepath.Join(tmpDir, "nas")
 				os.MkdirAll(nasPath, 0755)
-				
+
 				cfg := &config.Config{
 					Port:         0,
 					DataDir:      tmpDir,
@@ -77,7 +77,7 @@ func TestNASPathDetection(t *testing.T) {
 			setupFunc: func(tmpDir string) *config.Config {
 				nasPath := filepath.Join(tmpDir, "my-nas")
 				os.MkdirAll(nasPath, 0755)
-				
+
 				cfg := &config.Config{
 					Port:         0,
 					DataDir:      tmpDir,
@@ -120,7 +120,7 @@ func TestNASPathDetection(t *testing.T) {
 			setupFunc: func(tmpDir string) *config.Config {
 				customNAS := filepath.Join(tmpDir, "custom-nas-path")
 				os.MkdirAll(customNAS, 0755)
-				
+
 				cfg := &config.Config{
 					Port:         0,
 					DataDir:      tmpDir,
@@ -188,29 +188,29 @@ func TestNASPathDetection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			cfg := tt.setupFunc(tmpDir)
-			
+
 			// For custom path test, set the actual path
 			if tt.expectedNASDir == "custom" {
 				customPath := filepath.Join(tmpDir, "custom-nas-path")
 				tt.requestBody["nas_dir"] = customPath
 			}
-			
+
 			handlers := NewHandlers(cfg)
 			app := fiber.New()
-			
+
 			utilGroup := app.Group("/util")
 			utilGroup.Post("/deduplicate", handlers.HandleDeduplicate)
 			utilGroup.Post("/move-to-nas", handlers.HandleMoveToNAS)
-			
+
 			body, _ := json.Marshal(tt.requestBody)
 			req := httptest.NewRequest("POST", tt.endpoint, bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
-			
+
 			resp, err := app.Test(req, 5000)
 			if err != nil {
 				t.Fatalf("Request failed: %v", err)
 			}
-			
+
 			if tt.expectError {
 				if resp.StatusCode == 202 {
 					t.Errorf("Expected error (4xx), got 202 Accepted")
@@ -230,16 +230,16 @@ func TestNASPathDetection(t *testing.T) {
 // TestNASPathPriority tests the priority order of NAS path detection
 func TestNASPathPriority(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create both /nas-like and NAS_PATH directories
 	nasPath := filepath.Join(tmpDir, "nas")
 	envNASPath := filepath.Join(tmpDir, "env-nas")
 	customPath := filepath.Join(tmpDir, "custom-nas")
-	
+
 	os.MkdirAll(nasPath, 0755)
 	os.MkdirAll(envNASPath, 0755)
 	os.MkdirAll(customPath, 0755)
-	
+
 	cfg := &config.Config{
 		Port:         0,
 		DataDir:      tmpDir,
@@ -250,65 +250,65 @@ func TestNASPathPriority(t *testing.T) {
 		Environment:  "development",
 	}
 	cfg.EnsureDirectories()
-	
+
 	t.Run("Priority 1: Valid custom path > all others", func(t *testing.T) {
 		handlers := NewHandlers(cfg)
 		app := fiber.New()
 		app.Post("/util/deduplicate", handlers.HandleDeduplicate)
-		
+
 		body, _ := json.Marshal(map[string]string{
 			"nas_dir": customPath,
 		})
 		req := httptest.NewRequest("POST", "/util/deduplicate", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		resp, err := app.Test(req, 5000)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
 		}
-		
+
 		if resp.StatusCode != 202 {
 			t.Errorf("Expected custom path to be accepted, got status %d", resp.StatusCode)
 		}
 	})
-	
+
 	t.Run("Priority 2: Invalid custom path falls back to auto-detect", func(t *testing.T) {
 		handlers := NewHandlers(cfg)
 		app := fiber.New()
 		app.Post("/util/deduplicate", handlers.HandleDeduplicate)
-		
+
 		body, _ := json.Marshal(map[string]string{
 			"nas_dir": "/invalid/path",
 		})
 		req := httptest.NewRequest("POST", "/util/deduplicate", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		resp, err := app.Test(req, 5000)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
 		}
-		
+
 		// Should fall back to NAS_PATH (envNASPath) and succeed
 		if resp.StatusCode != 202 {
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			t.Errorf("Expected fallback to NAS_PATH, got status %d. Body: %s", resp.StatusCode, string(bodyBytes))
 		}
 	})
-	
+
 	t.Run("Priority 3: Empty request uses NAS_PATH when available", func(t *testing.T) {
 		handlers := NewHandlers(cfg)
 		app := fiber.New()
 		app.Post("/util/deduplicate", handlers.HandleDeduplicate)
-		
+
 		body, _ := json.Marshal(map[string]string{})
 		req := httptest.NewRequest("POST", "/util/deduplicate", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		resp, err := app.Test(req, 5000)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
 		}
-		
+
 		if resp.StatusCode != 202 {
 			t.Errorf("Expected NAS_PATH to be used, got status %d", resp.StatusCode)
 		}
@@ -319,11 +319,11 @@ func TestNASPathPriority(t *testing.T) {
 func TestDockerVsLocalDeployment(t *testing.T) {
 	t.Run("Docker deployment scenario", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		
+
 		// Simulate Docker: /nas mount exists
 		nasMount := filepath.Join(tmpDir, "nas")
 		os.MkdirAll(nasMount, 0755)
-		
+
 		cfg := &config.Config{
 			Port:         0,
 			DataDir:      "/app/data", // Docker path
@@ -333,43 +333,43 @@ func TestDockerVsLocalDeployment(t *testing.T) {
 			LogLevel:     "info",
 			Environment:  "production",
 		}
-		
+
 		// Override with test paths
 		cfg.DataDir = tmpDir
 		cfg.CSVDir = filepath.Join(tmpDir, "csv")
 		cfg.DownloadsDir = filepath.Join(tmpDir, "downloads")
 		cfg.EnsureDirectories()
-		
+
 		handlers := NewHandlers(cfg)
 		app := fiber.New()
 		app.Post("/util/deduplicate", handlers.HandleDeduplicate)
-		
+
 		// Frontend sends old macOS path
 		body, _ := json.Marshal(map[string]string{
 			"nas_dir": "/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks",
 		})
 		req := httptest.NewRequest("POST", "/util/deduplicate", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		resp, err := app.Test(req, 5000)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
 		}
-		
+
 		// Should detect invalid path and use NAS_PATH fallback
 		if resp.StatusCode != 202 {
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			t.Logf("Docker scenario: Should auto-detect NAS. Status: %d, Body: %s", resp.StatusCode, string(bodyBytes))
 		}
 	})
-	
+
 	t.Run("Local macOS deployment scenario", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		
+
 		// Simulate local: NAS_PATH points to actual volume
 		localNAS := filepath.Join(tmpDir, "local-nas")
 		os.MkdirAll(localNAS, 0755)
-		
+
 		cfg := &config.Config{
 			Port:         0,
 			DataDir:      tmpDir,
@@ -380,20 +380,20 @@ func TestDockerVsLocalDeployment(t *testing.T) {
 			Environment:  "development",
 		}
 		cfg.EnsureDirectories()
-		
+
 		handlers := NewHandlers(cfg)
 		app := fiber.New()
 		app.Post("/util/deduplicate", handlers.HandleDeduplicate)
-		
+
 		body, _ := json.Marshal(map[string]string{})
 		req := httptest.NewRequest("POST", "/util/deduplicate", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		resp, err := app.Test(req, 5000)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
 		}
-		
+
 		if resp.StatusCode != 202 {
 			t.Errorf("Local deployment should use NAS_PATH, got status %d", resp.StatusCode)
 		}

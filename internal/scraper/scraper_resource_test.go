@@ -76,15 +76,15 @@ func TestContextCleanup(t *testing.T) {
 		// Create and cleanup multiple contexts
 		for i := 0; i < 3; i++ {
 			ctx, cancel := chromedp.NewContext(allocCtx)
-			
+
 			// Run simple navigation
 			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 5*time.Second)
 			_ = chromedp.Run(timeoutCtx, chromedp.Navigate("about:blank"))
 			timeoutCancel()
-			
+
 			// Cleanup immediately
 			cancel()
-			
+
 			// Give Chrome time to cleanup
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -150,10 +150,10 @@ func TestChromeProcessCount(t *testing.T) {
 
 		finalCount := countChrome()
 		if finalCount > midCount {
-			t.Errorf("Chrome processes not cleaned up: before=%d, during=%d, after=%d", 
+			t.Errorf("Chrome processes not cleaned up: before=%d, during=%d, after=%d",
 				initialCount, midCount, finalCount)
 		} else {
-			t.Logf("Chrome processes cleaned up: before=%d, during=%d, after=%d", 
+			t.Logf("Chrome processes cleaned up: before=%d, during=%d, after=%d",
 				initialCount, midCount, finalCount)
 		}
 	})
@@ -209,12 +209,12 @@ func TestMemoryLeakPrevention(t *testing.T) {
 		// Simulate scraping multiple dates
 		for i := 0; i < 3; i++ {
 			ctx, cancel := chromedp.NewContext(allocCtx)
-			
+
 			// Simulate page operations (skip actual Chrome to keep test fast)
 			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 1*time.Second)
 			_ = timeoutCtx // Reference to avoid unused warning
 			timeoutCancel()
-			
+
 			// Immediate cleanup (Fix 1)
 			cancel()
 		}
@@ -233,7 +233,7 @@ func TestCreateChromeAllocator(t *testing.T) {
 		if allocCancel == nil {
 			t.Error("allocCancel should not be nil")
 		}
-		
+
 		defer allocCancel()
 
 		// Verify we can create a browser context
