@@ -70,6 +70,60 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// resolveDownloadsDir resolves the downloads directory path based on context
+// Returns resolved path and error if NAS is requested but not available
+func (h *Handlers) resolveDownloadsDir(requestedDir string) (string, error) {
+	downloadsDir := requestedDir
+
+	// Handle relative paths - convert to absolute
+	if !filepath.IsAbs(downloadsDir) {
+		// Check if we're in Docker first
+		if fileExists("/app/downloads") {
+			if downloadsDir == h.cfg.DownloadsDir || downloadsDir == "downloads" {
+				downloadsDir = "/app/downloads"
+			} else if downloadsDir == "nas" {
+				downloadsDir = "/nas"
+			}
+		} else {
+			// Local development
+			if downloadsDir == "nas" {
+				// Try NAS_PATH from config first
+				if h.cfg.NASPath != "" && fileExists(h.cfg.NASPath) {
+					downloadsDir = h.cfg.NASPath
+				} else {
+					// Auto-detect common NAS mount points on macOS/Linux
+					commonPaths := []string{
+						"/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks",
+						"/Volumes/Music/doyou-world-radio-tracks",
+						"/mnt/nas/music/doyou-world-radio-tracks",
+					}
+					found := false
+					for _, path := range commonPaths {
+						if fileExists(path) {
+							downloadsDir = path
+							found = true
+							break
+						}
+					}
+					if !found {
+						return "", fmt.Errorf("NAS storage not found - not mounted or configured. Set NAS_PATH environment variable or mount NAS at a common location")
+					}
+				}
+			} else {
+				// Use absolute path from config (already resolved)
+				downloadsDir = h.cfg.DownloadsDir
+			}
+		}
+	}
+
+	// Verify directory exists
+	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
+		return "", fmt.Errorf("directory not found: %s", downloadsDir)
+	}
+
+	return downloadsDir, nil
+}
+
 // Scrape handlers
 func (h *Handlers) HandleScrapeDate(c *fiber.Ctx) error {
 	type Request struct {
@@ -709,34 +763,16 @@ func (h *Handlers) HandleGetTracks(c *fiber.Ctx) error {
 	search := c.Query("search", "")
 	sortBy := c.Query("sort_by", "mod_time")
 	sortOrder := c.Query("sort_order", "desc")
-	downloadsDir := c.Query("downloads_dir", h.cfg.DownloadsDir)
+	requestedDir := c.Query("downloads_dir", h.cfg.DownloadsDir)
 	async := c.QueryBool("async", false)
 
-	// Handle relative paths - convert to absolute
-	if !filepath.IsAbs(downloadsDir) {
-		// Check if we're in Docker first
-		if fileExists("/app/downloads") {
-			if downloadsDir == h.cfg.DownloadsDir {
-				downloadsDir = "/app/downloads"
-			} else if downloadsDir == "nas" {
-				downloadsDir = "/nas"
-			}
-		} else {
-			// Local development
-			if downloadsDir == "nas" {
-				downloadsDir = h.cfg.NASPath
-			} else {
-				// Use absolute path from config (already resolved)
-				downloadsDir = h.cfg.DownloadsDir
-			}
-		}
-	}
-
-	// Check if directory exists
-	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
+	// Resolve downloads directory (handles Docker, local, NAS)
+	downloadsDir, err := h.resolveDownloadsDir(requestedDir)
+	if err != nil {
 		return c.Status(404).JSON(fiber.Map{
-			"error":   fmt.Sprintf("Directory not found: %s", downloadsDir),
-			"message": "NAS storage may not be mounted or directory doesn't exist",
+			"error":   err.Error(),
+			"message": "Storage directory not accessible",
+			"hint":    "Set NAS_PATH environment variable or check if NAS is mounted",
 		})
 	}
 
@@ -750,31 +786,15 @@ func (h *Handlers) HandleGetTracks(c *fiber.Ctx) error {
 
 // Track scan status handler
 func (h *Handlers) HandleGetTracksStatus(c *fiber.Ctx) error {
-	downloadsDir := c.Query("downloads_dir", h.cfg.DownloadsDir)
+	requestedDir := c.Query("downloads_dir", h.cfg.DownloadsDir)
 
-	// Handle relative paths - convert to absolute
-	if !filepath.IsAbs(downloadsDir) {
-		// Check if we're in Docker first
-		if fileExists("/app/downloads") {
-			if downloadsDir == h.cfg.DownloadsDir {
-				downloadsDir = "/app/downloads"
-			} else if downloadsDir == "nas" {
-				downloadsDir = "/nas"
-			}
-		} else {
-			// Local development
-			if downloadsDir == "nas" {
-				downloadsDir = h.cfg.NASPath
-			} else {
-				// Use absolute path from config (already resolved)
-				downloadsDir = h.cfg.DownloadsDir
-			}
-		}
-	}
-
-	// Check if directory exists
-	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
-		return c.Status(404).JSON(fiber.Map{"error": fmt.Sprintf("Directory not found: %s", downloadsDir)})
+	// Resolve downloads directory (handles Docker, local, NAS)
+	downloadsDir, err := h.resolveDownloadsDir(requestedDir)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error":   err.Error(),
+			"message": "Storage directory not accessible",
+		})
 	}
 
 	status := storage.GetTrackScanStatus(downloadsDir)

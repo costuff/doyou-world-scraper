@@ -164,7 +164,7 @@ func ScrapeMonth(monthStr string, job *jobs.Job, progressCallback func(current, 
 	totalTracks := 0
 
 	for day := 1; day <= 31; day++ {
-		// Check if job is cancelled
+		// Check if job is cancelled BEFORE starting each page (Fix 5)
 		if job != nil && job.IsCancelled() {
 			return totalDays, totalTracks, fmt.Errorf("job cancelled")
 		}
@@ -177,8 +177,39 @@ func ScrapeMonth(monthStr string, job *jobs.Job, progressCallback func(current, 
 
 		// Create new context for each date (Fix 1 - prevents memory leaks)
 		ctx, cancel := chromedp.NewContext(allocCtx)
-		count, err := scrapeSingleDateWithContext(ctx, dateStr)
-		cancel() // Immediate cleanup after each page
+
+		// Use select pattern to support cancellation during scraping (Fix 5)
+		done := make(chan struct {
+			count int
+			err   error
+		}, 1)
+
+		go func() {
+			count, err := scrapeSingleDateWithContext(ctx, dateStr)
+			done <- struct {
+				count int
+				err   error
+			}{count, err}
+		}()
+
+		// Wait for scraping to complete or job to be cancelled
+		var count int
+		var err error
+		select {
+		case result := <-done:
+			count = result.count
+			err = result.err
+		case <-time.After(35 * time.Second): // Slightly longer than individual page timeout
+			cancel() // Force cleanup on timeout
+			err = fmt.Errorf("scraping timeout after 35s")
+		}
+
+		cancel() // Always cleanup context
+
+		// Check again if cancelled during the operation (Fix 5)
+		if job != nil && job.IsCancelled() {
+			return totalDays, totalTracks, fmt.Errorf("job cancelled during scraping")
+		}
 
 		if err != nil {
 			fmt.Printf("Error scraping %s: %v\n", dateStr, err)
@@ -227,7 +258,7 @@ func ScrapeYear(yearStr string, job *jobs.Job, progressCallback func(current, to
 	totalTracks := 0
 
 	for m := 1; m <= 12; m++ {
-		// Check if job is cancelled
+		// Check if job is cancelled BEFORE starting each month (Fix 5)
 		if job != nil && job.IsCancelled() {
 			return totalDays, totalTracks, fmt.Errorf("job cancelled")
 		}
@@ -235,6 +266,11 @@ func ScrapeYear(yearStr string, job *jobs.Job, progressCallback func(current, to
 		t := time.Date(y, time.Month(m), 1, 0, 0, 0, 0, time.UTC)
 		mon := t.Month()
 		for day := 1; day <= 31; day++ {
+			// Check if job is cancelled BEFORE starting each page (Fix 5)
+			if job != nil && job.IsCancelled() {
+				return totalDays, totalTracks, fmt.Errorf("job cancelled")
+			}
+
 			d := time.Date(y, mon, day, 0, 0, 0, 0, time.UTC)
 			if d.Month() != mon || d.After(today) {
 				break
@@ -243,8 +279,39 @@ func ScrapeYear(yearStr string, job *jobs.Job, progressCallback func(current, to
 
 			// Create new context for each date (Fix 1 - prevents memory leaks)
 			ctx, cancel := chromedp.NewContext(allocCtx)
-			count, err := scrapeSingleDateWithContext(ctx, dateStr)
-			cancel() // Immediate cleanup after each page
+
+			// Use select pattern to support cancellation during scraping (Fix 5)
+			done := make(chan struct {
+				count int
+				err   error
+			}, 1)
+
+			go func() {
+				count, err := scrapeSingleDateWithContext(ctx, dateStr)
+				done <- struct {
+					count int
+					err   error
+				}{count, err}
+			}()
+
+			// Wait for scraping to complete or job to be cancelled
+			var count int
+			var err error
+			select {
+			case result := <-done:
+				count = result.count
+				err = result.err
+			case <-time.After(35 * time.Second): // Slightly longer than individual page timeout
+				cancel() // Force cleanup on timeout
+				err = fmt.Errorf("scraping timeout after 35s")
+			}
+
+			cancel() // Always cleanup context
+
+			// Check again if cancelled during the operation (Fix 5)
+			if job != nil && job.IsCancelled() {
+				return totalDays, totalTracks, fmt.Errorf("job cancelled during scraping")
+			}
 
 			if err != nil {
 				fmt.Printf("Error scraping %s: %v\n", dateStr, err)

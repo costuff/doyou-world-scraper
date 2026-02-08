@@ -194,20 +194,22 @@ cd frontend && npm run dev
 - Use meaningful test names: `TestFunctionName_Scenario_ExpectedBehavior`
 
 **Test Files Location:**
-- `internal/*_test.go` - New structure test files (handlers_test.go, jobs_test.go, handlers_nas_test.go, etc.)
+- `internal/*_test.go` - New structure test files (handlers_test.go, jobs_test.go, handlers_nas_test.go, scraper_concurrency_test.go, handlers_nas_resolve_test.go, etc.)
 - `api/*_test.go` - Legacy test files (still passing)
 - Run: `go test ./internal/... ./api/...`
 - Coverage: `go test -cover ./internal/... ./api/...`
 - Count tests: `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"`
-- **Current Stats**: 229 test cases, ~61.5% average coverage
+- **Current Stats**: 249+ test cases, ~62% average coverage
   - cmd/api: 1 test, 0.0% (main not testable)
-  - internal/api: 40 tests (including NAS path detection scenarios), 51.8%
+  - internal/api: 50 tests (including NAS path detection and resolution), 52.5%
   - internal/config: 18 tests, 96.4%
   - internal/downloader: 79 tests, 69.7%
   - internal/jobs: 13 tests, 53.7%
-  - internal/scraper: 3 tests, 60.3%
+  - internal/scraper: 15 tests (including concurrency tests), 60.3%
   - internal/storage: 62 tests, 53.2%
   - pkg/logger: 13 tests, 74.1%
+  - **Phase 2 Chrome Fixes**: 9 tests for semaphore limits and job cancellation (all passing)
+  - **NAS Path Resolution**: 10 new tests for auto-detection and error handling (all passing)
 
 **When Adding Features:**
 1. Write tests first (TDD approach preferred)

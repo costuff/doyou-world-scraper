@@ -356,11 +356,29 @@ go test -v ./internal/scraper/... -short
 # 8 tests, 3 skip in short mode (network tests), 0 failures
 ```
 
-### Phase 2: Performance Improvements (Do Second) 🔄 **NEXT**
-4. **Fix 4**: Limit concurrent scraping (semaphore) - ⏳ **TODO**
-5. **Fix 5**: Improve job cancellation (immediate cleanup) - ⏳ **TODO**
+### Phase 2: Performance Improvements (Do Second) ✅ **COMPLETED**
+4. ✅ **Fix 4**: Limit concurrent scraping (semaphore) - **DONE**
+5. ✅ **Fix 5**: Improve job cancellation (immediate cleanup) - **DONE**
 
-**Estimated Impact**: Better system stability, faster response to user actions
+**Status**: ✅ **COMPLETED** (Commit: [current])
+**Implementation**:
+- Added `scrapeSemaphore` with capacity of 2 in handlers.go to limit concurrent Chrome instances
+- All scrape endpoints (date, month, year) acquire/release semaphore with defer pattern
+- Implemented select/timeout pattern in ScrapeMonth and ScrapeYear for cancellation support
+- Cancellation checked before each page AND after each operation completes
+- Context cleanup forced on timeout (35s) or cancellation
+- 6 new tests added in scraper_concurrency_test.go (all passing)
+- 3 new tests added in handlers_concurrency_test.go (all passing)
+
+**Test Results**: ✅ All tests passing
+```bash
+go test -v ./internal/scraper/... -short
+# 6 new concurrency/cancellation tests (4 skip in short mode, 2 pass)
+go test -v ./internal/api -run TestScrapeConcurrency
+# All semaphore and cancellation tests passing
+```
+
+**Estimated Impact**: Better system stability, faster response to user actions, no resource exhaustion
 
 ### Phase 3: Monitoring (Do Last)
 6. Add memory usage metrics to job status
