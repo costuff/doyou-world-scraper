@@ -289,23 +289,30 @@ func (h *Handlers) HandleDeduplicate(c *fiber.Ctx) error {
 			downloadsDir = h.cfg.DownloadsDir
 		}
 	}
+	// Determine NAS directory with validation and auto-detection
 	nasDir := req.NASDir
-	if nasDir == "" {
-		if fileExists("/nas") {
-			nasDir = "/nas"
-		} else {
-			nasDir = h.cfg.NASPath
-		}
-	}
-
-	// Validate NAS directory exists if provided and not "skip"
+	
+	// If path provided, check if it exists; if not, auto-detect
 	if nasDir != "" && nasDir != "skip" {
 		if _, err := os.Stat(nasDir); os.IsNotExist(err) {
-			return c.Status(400).JSON(fiber.Map{
-				"error":   fmt.Sprintf("NAS directory does not exist: %s", nasDir),
-				"message": "NAS not available. Clear the NAS path in UI or set NAS_PATH environment variable",
-			})
+			// Requested path doesn't exist, try auto-detection
+			nasDir = ""
 		}
+	}
+	
+	// Auto-detect if empty or invalid path
+	if nasDir == "" {
+		if fileExists("/nas") {
+			nasDir = "/nas" // Docker mount
+		} else {
+			nasDir = h.cfg.NASPath // From NAS_PATH env var
+		}
+	}
+	
+	// Final validation: if still empty/skip after auto-detection, NAS is not available
+	if nasDir == "" || nasDir == "skip" {
+		// This is OK for deduplicate - will only scan downloads
+		nasDir = "skip"
 	}
 
 	job := jobs.NewJob("deduplicate", fiber.Map{
@@ -356,12 +363,23 @@ func (h *Handlers) HandleMoveToNAS(c *fiber.Ctx) error {
 		}
 	}
 
+	// Determine NAS directory with validation and auto-detection
 	nasDir := req.NASDir
+	
+	// If path provided, check if it exists; if not, auto-detect
+	if nasDir != "" && nasDir != "skip" {
+		if _, err := os.Stat(nasDir); os.IsNotExist(err) {
+			// Requested path doesn't exist, try auto-detection
+			nasDir = ""
+		}
+	}
+	
+	// Auto-detect if empty or invalid path
 	if nasDir == "" {
 		if fileExists("/nas") {
-			nasDir = "/nas"
+			nasDir = "/nas" // Docker mount
 		} else {
-			nasDir = h.cfg.NASPath
+			nasDir = h.cfg.NASPath // From NAS_PATH env var
 		}
 	}
 
@@ -369,7 +387,7 @@ func (h *Handlers) HandleMoveToNAS(c *fiber.Ctx) error {
 	if nasDir == "" || nasDir == "skip" {
 		return c.Status(400).JSON(fiber.Map{
 			"error":   "NAS directory not configured",
-			"message": "Please enter a valid NAS path in the UI or set NAS_PATH environment variable",
+			"message": "NAS not found. In Docker, ensure /nas is mounted. Locally, set NAS_PATH or clear the UI field.",
 		})
 	}
 
