@@ -298,12 +298,12 @@ func (h *Handlers) HandleDeduplicate(c *fiber.Ctx) error {
 		}
 	}
 
-	// Validate NAS directory exists if provided
+	// Validate NAS directory exists if provided and not "skip"
 	if nasDir != "" && nasDir != "skip" {
 		if _, err := os.Stat(nasDir); os.IsNotExist(err) {
 			return c.Status(400).JSON(fiber.Map{
 				"error":   fmt.Sprintf("NAS directory does not exist: %s", nasDir),
-				"message": "Please check your NAS path or use 'skip' to scan downloads only",
+				"message": "NAS not available. Clear the NAS path in UI or set NAS_PATH environment variable",
 			})
 		}
 	}
@@ -365,7 +365,14 @@ func (h *Handlers) HandleMoveToNAS(c *fiber.Ctx) error {
 		}
 	}
 
-	// Validate NAS directory exists
+	// Validate NAS directory exists - cannot move files if NAS is not available
+	if nasDir == "" || nasDir == "skip" {
+		return c.Status(400).JSON(fiber.Map{
+			"error":   "NAS directory not configured",
+			"message": "Please enter a valid NAS path in the UI or set NAS_PATH environment variable",
+		})
+	}
+
 	if _, err := os.Stat(nasDir); os.IsNotExist(err) {
 		return c.Status(400).JSON(fiber.Map{
 			"error":   fmt.Sprintf("NAS directory does not exist: %s", nasDir),
