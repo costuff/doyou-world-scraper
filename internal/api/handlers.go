@@ -18,10 +18,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// scrapeSemaphore limits concurrent Chrome instances to prevent resource exhaustion
-// Max 2 concurrent scraping jobs (Fix 4)
-var scrapeSemaphore = make(chan struct{}, 2)
-
 // Handlers holds the configuration and dependencies for HTTP handlers
 type Handlers struct {
 	cfg *config.Config
@@ -91,13 +87,6 @@ func (h *Handlers) HandleScrapeDate(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		// Acquire semaphore (blocks if 2 jobs already running) - Fix 4
-		scrapeSemaphore <- struct{}{}
-		defer func() { <-scrapeSemaphore }() // Release when done
-
-		// Start job now that we have resources
-		job.Start()
-
 		count, err := scraper.ScrapeSingleDate(req.Date)
 		if err != nil {
 			job.Fail(fmt.Sprintf("Scraping failed: %v", err))
@@ -134,13 +123,6 @@ func (h *Handlers) HandleScrapeMonth(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		// Acquire semaphore (blocks if 2 jobs already running) - Fix 4
-		scrapeSemaphore <- struct{}{}
-		defer func() { <-scrapeSemaphore }() // Release when done
-
-		// Start job now that we have resources
-		job.Start()
-
 		days, tracks, err := scraper.ScrapeMonth(req.Month, job, func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
@@ -180,13 +162,6 @@ func (h *Handlers) HandleScrapeYear(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		// Acquire semaphore (blocks if 2 jobs already running) - Fix 4
-		scrapeSemaphore <- struct{}{}
-		defer func() { <-scrapeSemaphore }() // Release when done
-
-		// Start job now that we have resources
-		job.Start()
-
 		days, tracks, err := scraper.ScrapeYear(req.Year, job, func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
@@ -233,7 +208,6 @@ func (h *Handlers) HandleDownloadFromCSV(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		job.Start()
 		downloadsDir := h.cfg.DownloadsDir
 		if fileExists("/app/data/downloads") {
 			downloadsDir = "/app/data/downloads"
@@ -273,7 +247,6 @@ func (h *Handlers) HandleDownloadAll(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		job.Start()
 		result, err := downloader.DownloadFromFolder(csvDir, 5, downloadsDir, "yt-dlp", job, func(current, total int, title, artist string) {
 			progress := int((float64(current) / float64(total)) * 100)
 			message := fmt.Sprintf("Downloading: %s - %s (%d/%d)", title, artist, current, total)
@@ -318,7 +291,7 @@ func (h *Handlers) HandleDeduplicate(c *fiber.Ctx) error {
 	}
 	// Determine NAS directory with validation and auto-detection
 	nasDir := req.NASDir
-
+	
 	// If path provided, check if it exists; if not, auto-detect
 	if nasDir != "" && nasDir != "skip" {
 		if _, err := os.Stat(nasDir); os.IsNotExist(err) {
@@ -326,7 +299,7 @@ func (h *Handlers) HandleDeduplicate(c *fiber.Ctx) error {
 			nasDir = ""
 		}
 	}
-
+	
 	// Auto-detect if empty or invalid path
 	if nasDir == "" {
 		if fileExists("/nas") {
@@ -335,7 +308,7 @@ func (h *Handlers) HandleDeduplicate(c *fiber.Ctx) error {
 			nasDir = h.cfg.NASPath // From NAS_PATH env var
 		}
 	}
-
+	
 	// Final validation: if still empty/skip after auto-detection, NAS is not available
 	if nasDir == "" || nasDir == "skip" {
 		// This is OK for deduplicate - will only scan downloads
@@ -348,7 +321,6 @@ func (h *Handlers) HandleDeduplicate(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		job.Start()
 		result, err := storage.RemoveDuplicates(downloadsDir, nasDir, job, func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
@@ -393,7 +365,7 @@ func (h *Handlers) HandleMoveToNAS(c *fiber.Ctx) error {
 
 	// Determine NAS directory with validation and auto-detection
 	nasDir := req.NASDir
-
+	
 	// If path provided, check if it exists; if not, auto-detect
 	if nasDir != "" && nasDir != "skip" {
 		if _, err := os.Stat(nasDir); os.IsNotExist(err) {
@@ -401,7 +373,7 @@ func (h *Handlers) HandleMoveToNAS(c *fiber.Ctx) error {
 			nasDir = ""
 		}
 	}
-
+	
 	// Auto-detect if empty or invalid path
 	if nasDir == "" {
 		if fileExists("/nas") {
@@ -432,7 +404,6 @@ func (h *Handlers) HandleMoveToNAS(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		job.Start()
 		result, err := storage.MoveDownloadsToNAS(downloadsDir, nasDir, job, func(current, total int) {
 			progress := int((float64(current) / float64(total)) * 100)
 			job.UpdateProgress(progress)
@@ -460,7 +431,6 @@ func (h *Handlers) HandleMatchDownloads(c *fiber.Ctx) error {
 	job := jobs.NewJob("match_downloads", fiber.Map{})
 
 	go func() {
-		job.Start()
 		csvDir := h.cfg.CSVDir
 		downloadsDir := h.cfg.DownloadsDir
 		if fileExists("/app/csv") {
@@ -501,7 +471,6 @@ func (h *Handlers) HandleClearCSVs(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		job.Start()
 		result, err := storage.ClearCSVs(csvDir)
 		if err != nil {
 			job.Fail(fmt.Sprintf("Clear CSVs failed: %v", err))
@@ -531,7 +500,6 @@ func (h *Handlers) HandleClearDownloads(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		job.Start()
 		result, err := storage.ClearDownloads(downloadsDir)
 		if err != nil {
 			job.Fail(fmt.Sprintf("Clear downloads failed: %v", err))
@@ -825,7 +793,6 @@ func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		job.Start()
 		// Find Python executable (venv locally, system python3 in Docker)
 		pythonPath := filepath.Join(h.cfg.DataDir, "..", ".venv", "bin", "python")
 		if !fileExists(pythonPath) {
@@ -891,7 +858,6 @@ func (h *Handlers) HandleAnalyzeAll(c *fiber.Ctx) error {
 	})
 
 	go func() {
-		job.Start()
 		// Find Python executable (venv locally, system python3 in Docker)
 		pythonPath := filepath.Join(h.cfg.DataDir, "..", ".venv", "bin", "python")
 		if !fileExists(pythonPath) {
