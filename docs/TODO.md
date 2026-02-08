@@ -27,16 +27,22 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Fix download progress tracking - Progress now updates per song with granular tracking (105 tests, 61.4% coverage)
 - [x] Add detailed job messages - Jobs now show "Downloading: Track Name - Artist" with real-time updates
 - [x] NAS path detection tests - Comprehensive tests for Docker/local deployment scenarios (19 tests)
-- [ ] **🔴 FIX CHROME CRASHES (PRIORITY 1 - CRITICAL)** - Memory leaks causing Chrome to crash during scraping
-  - **Issue**: Reusing Chrome context across multiple pages accumulates 2-3GB memory, causing crashes
-  - **Fix 1**: Create new context per date (not per month/year) for immediate cleanup
-  - **Fix 2**: Add 30s timeouts to all chromedp operations (prevent hanging contexts)
-  - **Fix 3**: Add Chrome memory limit flags (disable-images, disk-cache-size=1, etc.)
-  - **Fix 4**: Limit concurrent scraping jobs with semaphore (max 2 Chrome instances)
-  - **Fix 5**: Improve job cancellation to force immediate Chrome cleanup
-  - **See**: docs/CHROME_CRASH_FIX.md for detailed analysis and implementation guide
-  - **Expected Result**: Stable memory usage (~200-500MB), no crashes, responsive cancellation
-- [ ] **Backend Test Coverage to 80%+ (PRIORITY 2)** - Currently at 61.5% average (229 test cases)
+- [x] **✅ FIX CHROME CRASHES (COMPLETED)** - Memory leaks causing Chrome to crash during scraping
+  - **Phase 1 (v1.1.0)**: Memory management and timeouts ✅
+    - ✅ Fix 1: Create new context per date (not per month/year) for immediate cleanup
+    - ✅ Fix 2: Add 30s timeouts to all chromedp operations (prevent hanging contexts)
+    - ✅ Fix 3: Add Chrome memory limit flags (disable-images, disk-cache-size=1, etc.)
+  - **Phase 2 (v1.1.1)**: Concurrency limits and cancellation ✅
+    - ✅ Fix 4: Limit concurrent scraping jobs with semaphore (max 2 Chrome instances)
+    - ✅ Fix 5: Improve job cancellation to force immediate Chrome cleanup
+  - **Result**: Stable memory usage (~200-500MB), no crashes, responsive cancellation
+  - **Tests**: 15 new tests (scraper_resource_test.go, scraper_concurrency_test.go, handlers_concurrency_test.go)
+  - **See**: docs/CHROME_CRASH_FIX.md for detailed implementation
+- [x] **NAS Path Resolution (v1.1.1)** - Auto-detect NAS paths, better error messages ✅
+  - resolveDownloadsDir() helper with Docker/local/NAS support
+  - Auto-detect common mount points on macOS/Linux
+  - 10 new tests in handlers_nas_resolve_test.go
+- [ ] **Backend Test Coverage to 80%+ (PRIORITY 2)** - Currently at 62% average (249 test cases)
   - internal/api: 51.8% → 80%+ (add handler tests for error cases, edge cases, WebSocket scenarios)
   - internal/jobs: 53.7% → 80%+ (add job cleanup, cancellation, failure scenario tests)
   - internal/storage: 53.2% → 80%+ (add utility function tests for file operations, NAS operations)

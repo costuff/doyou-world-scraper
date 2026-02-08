@@ -116,7 +116,7 @@ func TestNASAutoDetection(t *testing.T) {
 	t.Run("Auto-detect common NAS paths on macOS", func(t *testing.T) {
 		// Create a temporary directory structure that mimics a macOS volume
 		tmpDir := t.TempDir()
-		
+
 		// Simulate a mounted volume path
 		nasPath := filepath.Join(tmpDir, "ExtHDD-8TB", "Music", "doyou-world-radio-tracks")
 		os.MkdirAll(nasPath, 0755)
@@ -130,7 +130,7 @@ func TestNASAutoDetection(t *testing.T) {
 		// This won't actually find it since we're not at /Volumes/...
 		// but the logic is tested
 		_, err := handlers.resolveDownloadsDir("nas")
-		
+
 		// Should get an error since mock path isn't in the common paths list
 		if err == nil {
 			t.Log("NAS auto-detection logic exists (would work with real /Volumes paths)")
