@@ -38,9 +38,9 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Real-time job monitoring with WebSocket integration
 - [x] Statistics dashboard (track counts, storage usage, date ranges)
 - [x] Fix frontend not updating properly - Optimized stats refresh (30s→5s), removed expensive JSON comparisons, added React.memo
+- [x] **Version footer** - Add footer component showing deployed backend and frontend versions for version tracking
 - [ ] Browse downloaded tracks, search/filter by metadata/genre (PRIORITY 1)
 - [ ] Music library analysis and visualization dashboard (PRIORITY 1)
-- [ ] **Version footer** - Add footer component showing deployed backend and frontend versions for version tracking
 
 ### Music Metadata & Analysis (NEW - PRIORITY 1)
 - [x] **FIX AUDIO ANALYSIS JSON PARSING** - Fixed librosa warnings and Python path detection
@@ -112,11 +112,10 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] **CV Keywords**: Event-driven, microservices, pub/sub, message queue, PostgreSQL, Redis, async processing
 
 ## Next Steps Priority Order
-1. **Version Footer** - Display backend/frontend versions in UI footer for deployment tracking (Quick Win)
-2. **Browse/Search Tracks UI** - Track library page with search/filter by BPM, key, energy, etc.
-3. **PostgreSQL Background Analysis Worker** - Process entire library, cache results in database
-4. **Music Library Visualization Dashboard** - Interactive graphs (Energy vs Danceability, BPM distribution, etc.)
-5. **Event-Driven Architecture with Redis** - Microservices with pub/sub messaging for async processing
+1. **Browse/Search Tracks UI** - Track library page with search/filter by BPM, key, energy, etc. (PRIORITY 1)
+2. **PostgreSQL Background Analysis Worker** - Process entire library, cache results in database
+3. **Music Library Visualization Dashboard** - Interactive graphs (Energy vs Danceability, BPM distribution, etc.)
+4. **Event-Driven Architecture with Redis** - Microservices with pub/sub messaging for async processing
 
 ## Code Quality & Architecture Improvements
 

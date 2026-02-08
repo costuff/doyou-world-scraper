@@ -7,9 +7,9 @@ const getWebSocketURL = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
   
-  // Use current host for production, localhost for development
+  // Use current host for production, localhost:3001 for development
   if (host.includes('localhost') || host.includes('127.0.0.1')) {
-    return 'ws://localhost:3000/api/v1/ws';
+    return 'ws://localhost:3001/api/v1/ws'; // Fixed: was 3000, should be 3001
   }
   
   return `${protocol}//${host}/api/v1/ws`;

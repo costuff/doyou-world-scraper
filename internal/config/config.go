@@ -21,7 +21,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:        getEnvInt("PORT", 3001),
 		DataDir:     getEnv("DATA_DIR", "./data"),
-		NASPath:     getEnv("NAS_PATH", "/nas"),
+		NASPath:     getEnv("NAS_PATH", ""), // Empty default - Docker auto-detects /nas, local needs explicit NAS_PATH
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 		Environment: getEnv("ENVIRONMENT", "development"),
 	}

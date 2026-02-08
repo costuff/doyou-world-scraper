@@ -7,6 +7,7 @@ import { DownloadControls } from './components/DownloadControls';
 import { JobsList } from './components/JobsList';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import TrackBrowser from './components/TrackBrowser';
+import { Footer } from './components/Footer';
 
 type View = 'dashboard' | 'tracks';
 
@@ -73,13 +74,7 @@ function App() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-12 py-6 border-t border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-slate-500 text-sm">
-            DoYou World Radio Track Scraper & Downloader
-          </p>
-        </div>
-      </footer>
+      <Footer />
       </div>
     </ErrorBoundary>
   );

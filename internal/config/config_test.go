@@ -17,7 +17,7 @@ func TestLoad(t *testing.T) {
 			name:        "Default values",
 			envVars:     map[string]string{},
 			wantPort:    3001,
-			wantNASPath: "/nas",
+			wantNASPath: "", // Empty default - Docker auto-detects /nas, local needs explicit NAS_PATH
 			wantErr:     false,
 		},
 		{
@@ -26,7 +26,7 @@ func TestLoad(t *testing.T) {
 				"PORT": "8080",
 			},
 			wantPort:    8080,
-			wantNASPath: "/nas",
+			wantNASPath: "", // Empty default
 			wantErr:     false,
 		},
 		{

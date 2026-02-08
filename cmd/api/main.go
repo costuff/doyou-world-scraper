@@ -61,6 +61,9 @@ func main() {
 	// Initialize handlers with config
 	handlers := api.NewHandlers(cfg)
 
+	// Version endpoint
+	apiGroup.Get("/version", handlers.HandleVersion)
+
 	// Scraping endpoints
 	scrapeGroup := apiGroup.Group("/scrape")
 	scrapeGroup.Post("/date", handlers.HandleScrapeDate)

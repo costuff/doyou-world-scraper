@@ -84,3 +84,10 @@ export interface TrackScanStatus {
   last_updated: string;
   error?: string;
 }
+
+export interface VersionInfo {
+  backend: string;
+  frontend: string;
+  commit?: string;
+  build_time?: string;
+}

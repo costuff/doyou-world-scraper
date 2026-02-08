@@ -13,10 +13,12 @@ services:
       - PORT=3000
       - TZ=${TZ:-Europe/Athens}
     networks:
-      - doyou-network    cap_add:
+      - doyou-network
+    cap_add:
       - SYS_ADMIN
     security_opt:
-      - seccomp=unconfined    healthcheck:
+      - seccomp=unconfined
+    healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
       interval: 30s
       timeout: 10s

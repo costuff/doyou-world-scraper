@@ -52,7 +52,7 @@ func TestAudioAnalysisEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
 		}
-		
+
 		// Could either accept job (202) or return 404 depending on validation
 		if resp.StatusCode != 202 && resp.StatusCode != 404 {
 			t.Errorf("Expected 202 or 404, got %d", resp.StatusCode)

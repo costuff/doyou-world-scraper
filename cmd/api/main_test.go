@@ -12,7 +12,7 @@ import (
 // Note: This tests the endpoint pattern, not the actual main() server
 func TestHealthEndpoint(t *testing.T) {
 	app := fiber.New()
-	
+
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status": "ok",

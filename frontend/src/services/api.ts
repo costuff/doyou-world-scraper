@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Job, Stats, TrackListResult, TrackScanStatus } from '../types';
+import type { Job, Stats, TrackListResult, TrackScanStatus, VersionInfo } from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -13,6 +13,9 @@ const api = axios.create({
 export const apiService = {
   // Health check
   health: () => api.get('/health'),
+
+  // Version info
+  getVersion: () => api.get<VersionInfo>('/version'),
 
   // Scraping
   scrapeDate: (date: string) => 

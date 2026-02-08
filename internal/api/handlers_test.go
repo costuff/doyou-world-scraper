@@ -36,6 +36,7 @@ func setupTestApp() *fiber.App {
 			"message": "DoYou World Radio Scraper API is running",
 		})
 	})
+	api.Get("/version", handlers.HandleVersion)
 
 	scrapeGroup := api.Group("/scrape")
 	scrapeGroup.Post("/date", handlers.HandleScrapeDate)
@@ -58,6 +59,33 @@ func setupTestApp() *fiber.App {
 	api.Post("/jobs/:id/cancel", handlers.HandleCancelJob)
 
 	return app
+}
+
+func TestVersionEndpoint(t *testing.T) {
+	app := setupTestApp()
+	req := httptest.NewRequest("GET", "/api/v1/version", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Error testing version endpoint: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	_ = json.Unmarshal(body, &result)
+	if result["backend"] == nil {
+		t.Error("Should return backend version")
+	}
+	if result["frontend"] == nil {
+		t.Error("Should return frontend version")
+	}
+	if result["commit"] == nil {
+		t.Error("Should return commit SHA")
+	}
+	if result["build_time"] == nil {
+		t.Error("Should return build time")
+	}
 }
 
 func TestHealthEndpoint(t *testing.T) {

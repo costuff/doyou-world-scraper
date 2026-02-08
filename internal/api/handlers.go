@@ -28,6 +28,38 @@ func NewHandlers(cfg *config.Config) *Handlers {
 	return &Handlers{cfg: cfg}
 }
 
+// VersionInfo struct for version endpoint
+type VersionInfo struct {
+	Backend   string `json:"backend"`
+	Frontend  string `json:"frontend"`
+	Commit    string `json:"commit"`
+	BuildTime string `json:"build_time"`
+}
+
+// HandleVersion returns version info for backend/frontend
+func (h *Handlers) HandleVersion(c *fiber.Ctx) error {
+	// Read backend version from VERSION file
+	backendVersion := "1.0.0"
+	if data, err := os.ReadFile("VERSION"); err == nil {
+		backendVersion = strings.TrimSpace(string(data))
+	}
+
+	// Read frontend version from frontend/VERSION file
+	frontendVersion := "1.0.0"
+	if data, err := os.ReadFile("frontend/VERSION"); err == nil {
+		frontendVersion = strings.TrimSpace(string(data))
+	}
+
+	commit := os.Getenv("GIT_COMMIT")
+	buildTime := os.Getenv("BUILD_TIME")
+	return c.JSON(VersionInfo{
+		Backend:   backendVersion,
+		Frontend:  frontendVersion,
+		Commit:    commit,
+		BuildTime: buildTime,
+	})
+}
+
 // Helper function to check if a file/directory exists
 func fileExists(path string) bool {
 	_, err := os.Stat(path)

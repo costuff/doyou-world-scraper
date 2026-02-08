@@ -311,8 +311,21 @@ func (h *Handlers) HandleSomeAction(c *fiber.Ctx) error {
 - All API operations return 202 Accepted immediately with job ID
 - Check job status with `GET /api/v1/jobs/:id` or via WebSocket
 - CSV column 5 (index 5) contains the Listen URL by default
-- NAS path: Configurable via h.cfg.NASPath (default /Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks)
+- NAS path: Configurable via h.cfg.NASPath (default: empty for local, Docker auto-detects /nas)
+- Set NAS_PATH environment variable for local NAS access (e.g., /Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks)
 - chromedp needs Chrome/Chromium installed
 - yt-dlp must be available in PATH
 - Frontend proxies `/api` requests to backend automatically
 - Stats endpoint checks if NAS exists before scanning
+
+## Version Management (IMPORTANT)
+**ALWAYS increment versions when committing changes:**
+- Backend version: Update `VERSION` file in project root (format: `X.Y.Z`)
+- Frontend version: Update `frontend/VERSION` file (format: `X.Y.Z`)
+- Version format: `MAJOR.MINOR.PATCH` (e.g., `1.0.1` → `1.0.2` for bug fixes)
+- Increment rules:
+  - PATCH (1.0.1 → 1.0.2): Bug fixes, minor changes
+  - MINOR (1.0.2 → 1.1.0): New features, backwards compatible
+  - MAJOR (1.1.0 → 2.0.0): Breaking changes
+- Versions are displayed in the UI footer for deployment tracking
+- Update both files even if only one component changed (keeps them in sync)
