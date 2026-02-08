@@ -8,7 +8,12 @@
 /internal/scraper/csv/
 /internal/scraper/data/
 /internal/api/test_data/
+/internal/api/data/
 /internal/*/test_data/
+
+# Test outputs
+coverage.out
+*.out
 
 # Logs
 *.log
@@ -38,6 +43,9 @@ Thumbs.db
 dist/
 build/
 *.local
+/api
+/doyou-api
+*.test
 
 # Docker
 docker-compose.override.yml
