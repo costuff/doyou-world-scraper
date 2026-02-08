@@ -180,10 +180,12 @@ cd frontend && npm run dev
 - Update existing tests when modifying functionality
 - Run tests before every commit: `go test ./...`
 - Never commit production code without corresponding tests
+- **Test deployment scenarios**: Docker vs local, NAS path detection across environments
 
 **Testing Standards:**
 - Unit tests: Test individual functions in isolation
 - Integration tests: Test API endpoints end-to-end
+- **Deployment scenario tests**: Test Docker/local path detection (see handlers_nas_test.go)
 - Use table-driven tests for multiple scenarios
 - Mock external dependencies (network calls, file system when appropriate)
 - Use `t.TempDir()` for file system tests
@@ -192,19 +194,19 @@ cd frontend && npm run dev
 - Use meaningful test names: `TestFunctionName_Scenario_ExpectedBehavior`
 
 **Test Files Location:**
-- `internal/*_test.go` - New structure test files (handlers_test.go, jobs_test.go, etc.)
+- `internal/*_test.go` - New structure test files (handlers_test.go, jobs_test.go, handlers_nas_test.go, etc.)
 - `api/*_test.go` - Legacy test files (still passing)
 - Run: `go test ./internal/... ./api/...`
 - Coverage: `go test -cover ./internal/... ./api/...`
 - Count tests: `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"`
-- **Current Stats**: 239 tests passing (157 test cases + subtests), ~61.5% average coverage
+- **Current Stats**: 229 test cases, ~61.5% average coverage
   - cmd/api: 1 test, 0.0% (main not testable)
-  - internal/api: 18 tests, 44.9%
+  - internal/api: 40 tests (including NAS path detection scenarios), 51.8%
   - internal/config: 18 tests, 96.4%
   - internal/downloader: 79 tests, 69.7%
   - internal/jobs: 13 tests, 53.7%
   - internal/scraper: 3 tests, 60.3%
-  - internal/storage: 94 tests, 53.2%
+  - internal/storage: 62 tests, 53.2%
   - pkg/logger: 13 tests, 74.1%
 
 **When Adding Features:**
