@@ -56,7 +56,7 @@ func NewJob(jobType string, input fiber.Map) *Job {
 	jobs[job.ID] = job
 	jobsMu.Unlock()
 
-	job.Start()
+	// Don't auto-start - let caller start after acquiring resources (e.g., semaphore)
 	return job
 }
 
