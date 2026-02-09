@@ -20,21 +20,35 @@ func TestNewJob(t *testing.T) {
 		t.Errorf("Expected job type 'test_job', got '%s'", job.Type)
 	}
 
-	if job.Status != StatusRunning {
-		t.Errorf("Expected status 'running', got '%s'", job.Status)
+	// Jobs should start as pending (Phase 2: Chrome semaphore fix)
+	if job.Status != StatusPending {
+		t.Errorf("Expected status 'pending', got '%s'", job.Status)
 	}
 
 	if job.Progress != 0 {
 		t.Errorf("Expected progress 0, got %d", job.Progress)
 	}
 
+	// StartedAt should NOT be set until Start() is called
+	if job.StartedAt != nil {
+		t.Error("StartedAt should not be set before Start() is called")
+	}
+
+	// Now start the job and verify it transitions to running
+	job.Start()
+	
+	if job.Status != StatusRunning {
+		t.Errorf("Expected status 'running' after Start(), got '%s'", job.Status)
+	}
+	
 	if job.StartedAt == nil {
-		t.Error("StartedAt should be set")
+		t.Error("StartedAt should be set after Start()")
 	}
 }
 
 func TestJobUpdateProgress(t *testing.T) {
 	job := NewJob("test_job", fiber.Map{})
+	job.Start() // Must start job before updating progress
 
 	job.UpdateProgress(50)
 
@@ -49,6 +63,7 @@ func TestJobUpdateProgress(t *testing.T) {
 
 func TestJobUpdateMessage(t *testing.T) {
 	job := NewJob("test_download", fiber.Map{})
+	job.Start() // Must start job before updating message
 
 	message := "Downloading: Track Name by Artist"
 	job.UpdateMessage(message)

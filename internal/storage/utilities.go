@@ -287,7 +287,8 @@ func MatchDownloadsToCSVs(outDir, downloadsDir string) (*MatchDownloadsResult, e
 
 func normalize(s string) string {
 	s = strings.ToLower(s)
-	s = regexp.MustCompile(`[^a-z0-9 ]+`).ReplaceAllString(s, " ")
+	// Remove non-alphanumeric characters but preserve Unicode letters
+	s = regexp.MustCompile(`[^\p{L}0-9 ]+`).ReplaceAllString(s, " ")
 	s = regexp.MustCompile(`\s+`).ReplaceAllString(s, " ")
 	s = strings.TrimSpace(s)
 	return s

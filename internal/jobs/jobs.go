@@ -130,7 +130,8 @@ func (j *Job) Fail(errorMsg string) {
 
 func (j *Job) Cancel() {
 	j.mu.Lock()
-	if j.Status != StatusRunning {
+	// Can cancel jobs in pending or running state, but not completed/failed jobs
+	if j.Status != StatusPending && j.Status != StatusRunning {
 		j.mu.Unlock()
 		return
 	}

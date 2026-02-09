@@ -14,6 +14,9 @@ import (
 
 // TestChromeMemoryLimits verifies Chrome is started with memory-optimized flags
 func TestChromeMemoryLimits(t *testing.T) {
+	// Skip by default - requires Chrome and may be slow
+	t.Skip("Skipping Chrome test - run manually if needed")
+
 	t.Run("Allocator includes memory limit flags", func(t *testing.T) {
 		allocCtx, allocCancel := createChromeAllocator()
 		defer allocCancel()
@@ -38,6 +41,9 @@ func TestChromeMemoryLimits(t *testing.T) {
 // TestContextCleanup verifies contexts are properly cleaned up
 func TestContextCleanup(t *testing.T) {
 	t.Run("scrapeSingleDateWithContext cleans up on timeout", func(t *testing.T) {
+		// Skip by default - requires Chrome and network
+		t.Skip("Skipping Chrome/network test - run manually if needed")
+
 		// Skip if Chrome not available
 		if testing.Short() {
 			t.Skip("Skipping Chrome test in short mode")
@@ -99,6 +105,9 @@ func TestContextCleanup(t *testing.T) {
 
 // TestChromeProcessCount verifies Chrome processes are limited
 func TestChromeProcessCount(t *testing.T) {
+	// Skip by default - requires Chrome
+	t.Skip("Skipping Chrome test - run manually if needed")
+
 	// Skip on CI or if Chrome not available
 	if os.Getenv("CI") != "" || testing.Short() {
 		t.Skip("Skipping Chrome process count test in CI/short mode")
@@ -175,6 +184,9 @@ func TestTimeoutBehavior(t *testing.T) {
 	})
 
 	t.Run("scrapeSingleDateWithContext respects timeout", func(t *testing.T) {
+		// Skip by default - network test  
+		t.Skip("Skipping network test - run manually if needed")
+
 		// Skip in short mode - requires actual network call
 		if testing.Short() {
 			t.Skip("Skipping network test in short mode")

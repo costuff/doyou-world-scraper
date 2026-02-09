@@ -47,6 +47,19 @@ func TestResolveDownloadsDir(t *testing.T) {
 	})
 
 	t.Run("Return error when nas requested but NAS not available locally", func(t *testing.T) {
+		// Skip if NAS is actually mounted (common paths exist)
+		commonPaths := []string{
+			"/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks",
+			"/Volumes/Music/doyou-world-radio-tracks",
+			"/mnt/nas/music/doyou-world-radio-tracks",
+		}
+		for _, path := range commonPaths {
+			if _, err := os.Stat(path); err == nil {
+				t.Skipf("Skipping: NAS is actually mounted at %s", path)
+				return
+			}
+		}
+
 		tmpDir := t.TempDir()
 		cfg := &config.Config{
 			DownloadsDir: tmpDir,

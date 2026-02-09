@@ -143,8 +143,9 @@ func TestScrapeDateEndpoint(t *testing.T) {
 		if job["type"] != "scrape_date" {
 			t.Error("Job type should be 'scrape_date'")
 		}
-		if job["status"] != "running" {
-			t.Error("Job status should be 'running'")
+		// Job starts as 'pending' before semaphore acquisition
+		if job["status"] != "pending" && job["status"] != "running" {
+			t.Errorf("Job status should be 'pending' or 'running', got '%v'", job["status"])
 		}
 	} else {
 		t.Error("Response should include job object")
@@ -392,8 +393,9 @@ func TestClearDownloadsEndpoint(t *testing.T) {
 		if job["type"] != "clear_downloads" {
 			t.Errorf("Job type should be 'clear_downloads', got '%v'", job["type"])
 		}
-		if job["status"] != "running" {
-			t.Errorf("Job status should be 'running', got '%v'", job["status"])
+		// Job starts as 'pending' before starting clearing operation
+		if job["status"] != "pending" && job["status"] != "running" {
+			t.Errorf("Job status should be 'pending' or 'running', got '%v'", job["status"])
 		}
 	} else {
 		t.Error("Response should contain job object")
