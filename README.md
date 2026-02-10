@@ -55,7 +55,7 @@ doyou-world-scraper/
 **Run Backend:**
 ```bash
 go run ./cmd/api
-# API available at http://localhost:3000
+# API available at http://localhost:3002
 ```
 
 **Run Frontend:**
@@ -78,8 +78,8 @@ docker-compose down
 ```
 
 **Services:**
-- API: http://localhost:3000
-- Frontend: http://localhost:8080
+- API: http://localhost:3000 (Docker dev) or http://localhost:3002 (local)
+- Frontend: http://localhost:8080 (Docker) or http://localhost:5173 (local)
 
 ## Features
 

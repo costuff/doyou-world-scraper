@@ -96,7 +96,7 @@ WebSocket connection indicator with auto-reconnect.
 
 ## WebSocket Integration
 
-The frontend connects to `ws://localhost:3000/api/v1/ws` for real-time updates:
+The frontend connects to `ws://localhost:3002/api/v1/ws` (local dev) or `ws://your-domain/api/v1/ws` (production) for real-time updates:
 
 ```typescript
 const { isConnected, jobs } = useWebSocket();

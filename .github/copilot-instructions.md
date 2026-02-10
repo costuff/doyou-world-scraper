@@ -317,7 +317,8 @@ func (h *Handlers) HandleSomeAction(c *fiber.Ctx) error {
 ## Important Notes
 - **Port Configuration**:
   - Local development (outside Docker): Port 3002 (avoids VS Code Helper conflict on 3001)
-  - Docker containers (dev & prod): Port 3000 (isolated environment, standard port)
+  - Docker development: Port 3000 (docker-compose.yml)
+  - Docker production: Port 3001 (docker-compose.prod.yml, for Cloudflare tunnel)
   - Frontend Vite dev server: Port 5173
 - All API operations return 202 Accepted immediately with job ID
 - Check job status with `GET /api/v1/jobs/:id` or via WebSocket
