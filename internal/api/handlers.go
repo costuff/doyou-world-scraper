@@ -818,7 +818,7 @@ func (h *Handlers) HandleGetAnalyzedTracks(c *fiber.Ctx) error {
 
 	// Scan for MP3 files with companion JSON files
 	tracks := []fiber.Map{}
-	
+
 	entries, err := os.ReadDir(downloadsDir)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{

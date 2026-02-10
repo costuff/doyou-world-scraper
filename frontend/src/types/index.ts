@@ -91,3 +91,14 @@ export interface VersionInfo {
   commit?: string;
   build_time?: string;
 }
+
+export interface AnalyzedTrack {
+  file_path: string;
+  file_name: string;
+  analysis: AudioAnalysis;
+}
+
+export interface AnalyzedTracksResult {
+  tracks: AnalyzedTrack[];
+  count: number;
+}

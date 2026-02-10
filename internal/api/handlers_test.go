@@ -737,7 +737,7 @@ func TestGetAnalyzedTracksEndpoint(t *testing.T) {
 
 	// Check first track structure
 	track := tracks[0].(map[string]interface{})
-	
+
 	expectedFields := []string{"file_path", "file_name", "analysis"}
 	for _, field := range expectedFields {
 		if _, exists := track[field]; !exists {
