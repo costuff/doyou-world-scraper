@@ -862,8 +862,8 @@ func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
 			scriptPath = "/app/scripts/analyze_audio.py"
 		}
 
-		// Run Python analysis script
-		cmd := exec.Command(pythonPath, scriptPath, "--single", "--quiet", req.FilePath)
+		// Run Python analysis script with --quick flag for faster web UI response
+		cmd := exec.Command(pythonPath, scriptPath, "--single", "--quiet", "--quick", req.FilePath)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			job.Fail(fmt.Sprintf("Analysis failed: %v - %s", err, string(output)))

@@ -41,14 +41,14 @@ def timeout(seconds=30):
     return decorator
 
 
-@timeout(180)  # 180 second timeout (3 min) for loading large files
-def extract_audio_features(file_path: str, quiet: bool = False) -> Dict[str, Any]:
+def extract_audio_features(file_path: str, quiet: bool = False, quick_mode: bool = False) -> Dict[str, Any]:
     """
     Extract comprehensive audio features from an audio file.
     
     Args:
         file_path: Path to the audio file
         quiet: If True, suppress progress messages (only output JSON)
+        quick_mode: If True, analyze only first 60s with shorter timeout (for web UI)
         
     Returns:
         Dictionary containing all extracted features
@@ -59,10 +59,18 @@ def extract_audio_features(file_path: str, quiet: bool = False) -> Dict[str, Any
     
     log(f"Analyzing: {file_path}")
     
+    # Set duration and timeout based on mode
+    duration = 60 if quick_mode else None  # None = full track
+    timeout_seconds = 180 if quick_mode else 300  # 3 min for quick, 5 min for full
+    
     # Load audio file with timeout protection
+    @timeout(timeout_seconds)
+    def load_audio():
+        return librosa.load(file_path, sr=22050, duration=duration, mono=True)
+    
     try:
-        log("Loading audio file...")
-        y, sr = librosa.load(file_path, sr=22050, duration=60, mono=True)  # Load first 60s only (faster)
+        log(f"Loading audio file... ({'first 60s' if quick_mode else 'full track'})")
+        y, sr = load_audio()
         log(f"Audio loaded: {len(y)/sr:.1f}s at {sr}Hz")
     except TimeoutError as e:
         return {"error": f"Audio loading timed out: {str(e)}"}
@@ -336,6 +344,8 @@ def main():
                        help='Analyze single file and print to stdout')
     parser.add_argument('-q', '--quiet', action='store_true',
                        help='Suppress progress messages (only output JSON)')
+    parser.add_argument('--quick', action='store_true',
+                       help='Quick mode: analyze first 60s only (faster, for web UI)')
     
     args = parser.parse_args()
     
@@ -345,7 +355,7 @@ def main():
     
     if args.single or os.path.isfile(args.input):
         # Analyze single file
-        features = extract_audio_features(args.input, quiet=args.quiet)
+        features = extract_audio_features(args.input, quiet=args.quiet, quick_mode=args.quick)
         print(json.dumps(features, indent=2))
         
         if args.spectrogram:
