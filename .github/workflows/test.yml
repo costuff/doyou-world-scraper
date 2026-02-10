@@ -5,6 +5,7 @@ on:
     branches: [ main, master, develop ]
   pull_request:
     branches: [ main, master, develop ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
   workflow_dispatch:
 
 env:
@@ -16,6 +17,8 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    # Skip if PR is in draft state
+    if: github.event.pull_request.draft == false || github.event_name != 'pull_request'
     
     steps:
       - name: Checkout code

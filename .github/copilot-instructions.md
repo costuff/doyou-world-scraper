@@ -8,7 +8,9 @@ This is a full-stack music scraper and management system for DoYou World Radio. 
 - **Scraping**: chromedp (headless Chrome) for web scraping
 - **Downloading**: yt-dlp for audio extraction from SoundCloud/YouTube/Spotify/Apple Music
 - **Storage**: Local filesystem + NAS backup at `/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks`
-- **API**: REST API on port 3000 with async job tracking + WebSocket support
+- **API**: REST API with async job tracking + WebSocket support
+  - **Local Dev**: Port 3002 (avoids VS Code conflict on 3001)
+  - **Docker**: Port 3000 (isolated container environment)
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS (port 5173)
 - **Logging**: Structured logging with zerolog
 - **Config**: Centralized configuration via environment variables
@@ -199,9 +201,9 @@ cd frontend && npm run dev
 - Run: `go test ./internal/... ./api/...`
 - Coverage: `go test -cover ./internal/... ./api/...`
 - Count tests: `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"`
-- **Current Stats**: 290+ test cases, ~65% average coverage
-  - cmd/api: 1 test, 0.0% (main not testable)
-  - internal/api: 50 tests (including NAS path detection and resolution), 52.5%
+  - **Current Stats**: 376 test cases, ~63% average coverage
+    - cmd/api: 1 test, 0.0% (main not testable)
+    - internal/api: 51 tests (including analyzed tracks endpoint), 61.1%
   - internal/config: 18 tests, 96.4%
   - internal/downloader: 79 tests, 69.7%
   - internal/jobs: 26 tests (includes extended lifecycle, cancellation, concurrency tests), 58.0%
@@ -313,7 +315,11 @@ func (h *Handlers) HandleSomeAction(c *fiber.Ctx) error {
 7. **Authentication** and user management
 
 ## Important Notes
-- The API server runs on port 3000 (configurable via PORT env var)
+- **Port Configuration**:
+  - Local development (outside Docker): Port 3002 (avoids VS Code Helper conflict on 3001)
+  - Docker development: Port 3000 (docker-compose.yml)
+  - Docker production: Port 3001 (docker-compose.prod.yml, for Cloudflare tunnel)
+  - Frontend Vite dev server: Port 5173
 - All API operations return 202 Accepted immediately with job ID
 - Check job status with `GET /api/v1/jobs/:id` or via WebSocket
 - CSV column 5 (index 5) contains the Listen URL by default

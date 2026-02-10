@@ -7,9 +7,10 @@ import { DownloadControls } from './components/DownloadControls';
 import { JobsList } from './components/JobsList';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import TrackBrowser from './components/TrackBrowser';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 import { Footer } from './components/Footer';
 
-type View = 'dashboard' | 'tracks';
+type View = 'dashboard' | 'tracks' | 'analytics';
 
 function App() {
   const { isConnected, jobs } = useWebSocket();
@@ -45,6 +46,16 @@ function App() {
                 >
                   Browse Tracks
                 </button>
+                <button
+                  onClick={() => setCurrentView('analytics')}
+                  className={`px-4 py-2 rounded-lg transition ${
+                    currentView === 'analytics'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-700'
+                  }`}
+                >
+                  Analytics
+                </button>
               </nav>
             </div>
             <ConnectionStatus isConnected={isConnected} />
@@ -71,6 +82,8 @@ function App() {
         )}
 
         {currentView === 'tracks' && <TrackBrowser />}
+
+        {currentView === 'analytics' && <AnalyticsDashboard />}
       </main>
 
       {/* Footer */}

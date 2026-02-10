@@ -52,7 +52,7 @@ go run ./cmd/api
 # API auto-reloads on save (if using air or manual restart)
 
 # 3. Test manually via curl or frontend UI
-curl http://localhost:3000/api/v1/your-endpoint
+curl http://localhost:3002/api/v1/your-endpoint
 
 # 4. Write tests
 go test ./internal/... ./api/...
@@ -168,7 +168,7 @@ dlv debug . -- serve
 ### Check What's Running
 ```bash
 # Local servers
-lsof -i :3000  # API
+lsof -i :3002  # API (local dev)
 lsof -i :5173  # Frontend dev
 
 # Docker containers
@@ -181,7 +181,9 @@ docker exec -it doyou-api sh
 
 ### Port Already in Use
 ```bash
-# Find and kill process
+# Find and kill process on local dev port
+lsof -ti:3002 | xargs kill -9
+# Or for Docker port
 lsof -ti:3000 | xargs kill -9
 ```
 
@@ -221,7 +223,7 @@ Before pushing to production:
 - [ ] Frontend builds: `cd frontend && npm run build`
 - [ ] Docker builds locally: `docker compose build`
 - [ ] Test in Docker: `docker compose up -d`
-- [ ] Check health: `curl http://localhost:3000/api/v1/health`
+- [ ] Check health: `curl http://localhost:3002/api/v1/health` (local) or `:3000` (Docker)
 - [ ] Verify features work end-to-end
 - [ ] Commit and push → Watchtower deploys automatically
 
@@ -229,7 +231,7 @@ Before pushing to production:
 
 ### Local Development (.env.local)
 ```bash
-API_PORT=3000
+API_PORT=3002              # Local dev (avoids VS Code conflict)
 FRONTEND_PORT=5173
 NAS_PATH=/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks
 TZ=Europe/Athens
@@ -237,8 +239,8 @@ TZ=Europe/Athens
 
 ### Production on Pi (.env)
 ```bash
-API_PORT=3000
-FRONTEND_PORT=3001
+API_PORT=3000              # Docker host port mapping
+FRONTEND_PORT=8080         # Frontend nginx container
 NAS_PATH=/mnt/mydrive/ExtHDD-8TB/Music/doyou-world-radio-tracks
 TZ=Europe/Athens
 ```

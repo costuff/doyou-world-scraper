@@ -680,6 +680,17 @@ func MoveDownloadsToNAS(downloadsDir, nasDir string, job *jobs.Job, progressCall
 
 		// Check if file already exists on NAS
 		if _, err := os.Stat(dstPath); err == nil {
+			// File exists on NAS - verify it's valid, then delete local copy
+			srcInfo, srcErr := os.Stat(srcPath)
+			dstInfo, dstErr := os.Stat(dstPath)
+
+			if srcErr == nil && dstErr == nil && srcInfo.Size() == dstInfo.Size() {
+				// NAS file is valid, safe to remove local copy
+				if err := os.Remove(srcPath); err != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("File exists on NAS but failed to delete local copy %s: %v", filename, err))
+				}
+			}
+
 			result.SkippedFiles++
 			continue
 		}

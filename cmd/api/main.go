@@ -86,6 +86,7 @@ func main() {
 
 	// Track browsing endpoints
 	apiGroup.Get("/tracks", handlers.HandleGetTracks)
+	apiGroup.Get("/tracks/analyzed", handlers.HandleGetAnalyzedTracks)
 	apiGroup.Get("/tracks/stream", handlers.HandleStreamTrack)
 	apiGroup.Get("/tracks/status", handlers.HandleGetTracksStatus)
 

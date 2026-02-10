@@ -19,7 +19,7 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:        getEnvInt("PORT", 3001),
+		Port:        getEnvInt("PORT", 3002), // Changed from 3001 to avoid VS Code port conflict
 		DataDir:     getEnv("DATA_DIR", "./data"),
 		NASPath:     getEnv("NAS_PATH", ""), // Empty default - Docker auto-detects /nas, local needs explicit NAS_PATH
 		LogLevel:    getEnv("LOG_LEVEL", "info"),

@@ -7,6 +7,7 @@ import (
 	"doyou-world-scraper/internal/jobs"
 	"doyou-world-scraper/internal/scraper"
 	"doyou-world-scraper/internal/storage"
+	"doyou-world-scraper/pkg/logger"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -801,6 +802,73 @@ func (h *Handlers) HandleGetTracksStatus(c *fiber.Ctx) error {
 	return c.JSON(status)
 }
 
+// Get analyzed tracks (tracks with companion .json analysis files)
+func (h *Handlers) HandleGetAnalyzedTracks(c *fiber.Ctx) error {
+	requestedDir := c.Query("downloads_dir", h.cfg.DownloadsDir)
+
+	// Resolve downloads directory (handles Docker, local, NAS)
+	downloadsDir, err := h.resolveDownloadsDir(requestedDir)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error":   err.Error(),
+			"message": "Storage directory not accessible",
+			"hint":    "Set NAS_PATH environment variable or check if NAS is mounted",
+		})
+	}
+
+	// Scan for MP3 files with companion JSON files
+	tracks := []fiber.Map{}
+
+	entries, err := os.ReadDir(downloadsDir)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to read directory: %v", err),
+		})
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		fileName := entry.Name()
+		// Only process MP3 files
+		if !strings.HasSuffix(strings.ToLower(fileName), ".mp3") {
+			continue
+		}
+
+		// Check for companion JSON file
+		baseName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+		jsonPath := filepath.Join(downloadsDir, baseName+".json")
+
+		if _, err := os.Stat(jsonPath); err == nil {
+			// JSON file exists, read analysis data
+			jsonData, err := os.ReadFile(jsonPath)
+			if err != nil {
+				logger.Errorf("Failed to read analysis file %s: %v", jsonPath, err)
+				continue
+			}
+
+			var analysis map[string]interface{}
+			if err := json.Unmarshal(jsonData, &analysis); err != nil {
+				logger.Errorf("Failed to parse analysis file %s: %v", jsonPath, err)
+				continue
+			}
+
+			tracks = append(tracks, fiber.Map{
+				"file_path": filepath.Join(downloadsDir, fileName),
+				"file_name": fileName,
+				"analysis":  analysis,
+			})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"tracks": tracks,
+		"count":  len(tracks),
+	})
+}
+
 // Serve audio file for playback
 func (h *Handlers) HandleStreamTrack(c *fiber.Ctx) error {
 	filepath := c.Query("file")
@@ -877,8 +945,17 @@ func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
 			return
 		}
 
+		// Save analysis to companion JSON file
+		baseName := strings.TrimSuffix(req.FilePath, filepath.Ext(req.FilePath))
+		jsonPath := baseName + ".json"
+		if err := os.WriteFile(jsonPath, output, 0644); err != nil {
+			logger.Errorf("Failed to save analysis JSON: %v (path: %s)", err, jsonPath)
+			// Don't fail the job, just log the error
+		}
+
 		job.Complete(fiber.Map{
-			"analysis": analysis,
+			"analysis":  analysis,
+			"json_path": jsonPath,
 		})
 	}()
 
@@ -928,29 +1005,65 @@ func (h *Handlers) HandleAnalyzeAll(c *fiber.Ctx) error {
 			scriptPath = "/app/scripts/analyze_audio.py"
 		}
 
-		outputPath := filepath.Join(downloadsDir, "..", "audio_analysis.json")
-		if fileExists("/app/data") {
-			outputPath = "/app/data/audio_analysis.json"
-		}
-
-		args := []string{scriptPath, downloadsDir, "-o", outputPath}
-		if req.GenerateSpectrograms {
-			args = append(args, "--spectrogram")
-		}
-
-		// Run analysis with progress tracking
-		job.UpdateProgressWithMessage(0, "Starting batch analysis...")
-
-		cmd := exec.Command(pythonPath, args...)
-		output, err := cmd.CombinedOutput()
+		// Get all MP3 files in downloads directory
+		mp3Files, err := filepath.Glob(filepath.Join(downloadsDir, "*.mp3"))
 		if err != nil {
-			job.Fail(fmt.Sprintf("Batch analysis failed: %v - %s", err, string(output)))
+			job.Fail(fmt.Sprintf("Failed to list MP3 files: %v", err))
 			return
 		}
 
+		if len(mp3Files) == 0 {
+			job.Complete(fiber.Map{
+				"message":        "No MP3 files found to analyze",
+				"analyzed_count": 0,
+			})
+			return
+		}
+
+		job.UpdateProgressWithMessage(0, fmt.Sprintf("Found %d tracks to analyze", len(mp3Files)))
+
+		analyzed := 0
+		failed := 0
+		skipped := 0
+
+		for i, mp3Path := range mp3Files {
+			// Check if already analyzed (JSON exists)
+			baseName := strings.TrimSuffix(mp3Path, filepath.Ext(mp3Path))
+			jsonPath := baseName + ".json"
+			if fileExists(jsonPath) {
+				skipped++
+				continue
+			}
+
+			// Update progress
+			progress := int((float64(i) / float64(len(mp3Files))) * 100)
+			job.UpdateProgressWithMessage(progress, fmt.Sprintf("Analyzing %d/%d: %s", i+1, len(mp3Files), filepath.Base(mp3Path)))
+
+			// Run analysis for this file
+			cmd := exec.Command(pythonPath, scriptPath, "--single", "--quiet", "--quick", mp3Path)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				logger.Errorf("Failed to analyze track %s: %v", mp3Path, err)
+				failed++
+				continue
+			}
+
+			// Save companion JSON file
+			if err := os.WriteFile(jsonPath, output, 0644); err != nil {
+				logger.Errorf("Failed to save analysis JSON %s: %v", jsonPath, err)
+				failed++
+				continue
+			}
+
+			analyzed++
+		}
+
 		job.Complete(fiber.Map{
-			"output_file": outputPath,
-			"message":     string(output),
+			"analyzed_count": analyzed,
+			"failed_count":   failed,
+			"skipped_count":  skipped,
+			"total_files":    len(mp3Files),
+			"message":        fmt.Sprintf("Analyzed %d tracks (%d skipped, %d failed)", analyzed, skipped, failed),
 		})
 	}()
 

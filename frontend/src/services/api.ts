@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Job, Stats, TrackListResult, TrackScanStatus, VersionInfo } from '../types';
+import type { Job, Stats, TrackListResult, TrackScanStatus, VersionInfo, AnalyzedTracksResult } from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -80,6 +80,9 @@ export const apiService = {
   
   getStreamUrl: (filePath: string) =>
     `${API_BASE}/tracks/stream?file=${encodeURIComponent(filePath)}`,
+
+  getAnalyzedTracks: (params?: { downloads_dir?: string }) =>
+    api.get<AnalyzedTracksResult>('/tracks/analyzed', { params }),
 
   // Audio Analysis
   analyzeTrack: (filePath: string) =>

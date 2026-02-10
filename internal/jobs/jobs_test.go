@@ -36,11 +36,11 @@ func TestNewJob(t *testing.T) {
 
 	// Now start the job and verify it transitions to running
 	job.Start()
-	
+
 	if job.Status != StatusRunning {
 		t.Errorf("Expected status 'running' after Start(), got '%s'", job.Status)
 	}
-	
+
 	if job.StartedAt == nil {
 		t.Error("StartedAt should be set after Start()")
 	}
