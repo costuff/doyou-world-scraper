@@ -16,7 +16,7 @@ env:
 jobs:
   test:
     name: Run Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     # Skip if PR is in draft state
     if: github.event.pull_request.draft == false || github.event_name != 'pull_request'
     
@@ -60,7 +60,7 @@ jobs:
   build-and-push:
     name: Build Docker Images
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     # Only build on main/master branches, not on develop or PRs
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
@@ -142,7 +142,7 @@ jobs:
           
   # lint:
   #   name: Lint Code
-  #   runs-on: ubuntu-latest
+  #   runs-on: self-hosted
   #   
   #   steps:
   #     - name: Checkout code
