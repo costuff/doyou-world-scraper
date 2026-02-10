@@ -16,7 +16,7 @@ func TestLoad(t *testing.T) {
 		{
 			name:        "Default values",
 			envVars:     map[string]string{},
-			wantPort:    3001,
+			wantPort:    3002,
 			wantNASPath: "", // Empty default - Docker auto-detects /nas, local needs explicit NAS_PATH
 			wantErr:     false,
 		},
@@ -34,7 +34,7 @@ func TestLoad(t *testing.T) {
 			envVars: map[string]string{
 				"NAS_PATH": "/mnt/storage",
 			},
-			wantPort:    3001,
+			wantPort:    3002,
 			wantNASPath: "/mnt/storage",
 			wantErr:     false,
 		},
@@ -57,7 +57,7 @@ func TestLoad(t *testing.T) {
 			envVars: map[string]string{
 				"ENVIRONMENT": "production",
 			},
-			wantPort: 3001,
+			wantPort: 3002,
 			wantErr:  false,
 		},
 	}
@@ -116,7 +116,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "Valid config",
 			cfg: &Config{
-				Port:     3001,
+				Port:     3002,
 				DataDir:  "./data",
 				LogLevel: "info",
 			},
