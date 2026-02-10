@@ -40,6 +40,10 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /build/api .
 
+# Copy VERSION files for runtime version display
+COPY VERSION ./VERSION
+COPY frontend/VERSION ./frontend/VERSION
+
 # Copy Python analysis scripts
 COPY scripts/ ./scripts/
 
