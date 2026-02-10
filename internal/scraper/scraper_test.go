@@ -140,3 +140,134 @@ func TestFileExists(t *testing.T) {
 		}
 	})
 }
+
+func TestExtractBetween(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		start    string
+		end      string
+		expected string
+	}{
+		{
+			name:     "Normal extraction",
+			input:    `<h1 class="title">Hello World</h1>`,
+			start:    `<h1 class="title">`,
+			end:      `</h1>`,
+			expected: "Hello World",
+		},
+		{
+			name:     "With extra whitespace",
+			input:    `<h1>  Spaced Text  </h1>`,
+			start:    `<h1>`,
+			end:      `</h1>`,
+			expected: "Spaced Text",
+		},
+		{
+			name:     "Start not found",
+			input:    `<h1>Hello</h1>`,
+			start:    `<h2>`,
+			end:      `</h2>`,
+			expected: "",
+		},
+		{
+			name:     "End not found",
+			input:    `<h1>Hello`,
+			start:    `<h1>`,
+			end:      `</h1>`,
+			expected: "",
+		},
+		{
+			name:     "Empty string",
+			input:    "",
+			start:    `<h1>`,
+			end:      `</h1>`,
+			expected: "",
+		},
+		{
+			name:     "Multiple occurrences (first match)",
+			input:    `<span>First</span><span>Second</span>`,
+			start:    `<span>`,
+			end:      `</span>`,
+			expected: "First",
+		},
+		{
+			name:     "Nested tags",
+			input:    `<div><span>Nested</span></div>`,
+			start:    `<div>`,
+			end:      `</div>`,
+			expected: "<span>Nested</span>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractBetween(tt.input, tt.start, tt.end)
+			if result != tt.expected {
+				t.Errorf("extractBetween() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExtractHref(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		start    string
+		end      string
+		expected string
+	}{
+		{
+			name:     "Normal href extraction",
+			input:    `<a href="https://example.com" target="_blank">`,
+			start:    `<a href="`,
+			end:      `" target=`,
+			expected: "https://example.com",
+		},
+		{
+			name:     "URL with parameters",
+			input:    `<a href="https://example.com?id=123&name=test" target="_blank">`,
+			start:    `<a href="`,
+			end:      `" target=`,
+			expected: "https://example.com?id=123&name=test",
+		},
+		{
+			name:     "Start not found",
+			input:    `<div>No link here</div>`,
+			start:    `<a href="`,
+			end:      `" target=`,
+			expected: "",
+		},
+		{
+			name:     "End not found",
+			input:    `<a href="https://example.com`,
+			start:    `<a href="`,
+			end:      `" target=`,
+			expected: "",
+		},
+		{
+			name:     "Empty href",
+			input:    `<a href="" target="_blank">`,
+			start:    `<a href="`,
+			end:      `" target=`,
+			expected: "",
+		},
+		{
+			name:     "Multiple links (first match)",
+			input:    `<a href="first.com">Link1</a><a href="second.com">Link2</a>`,
+			start:    `<a href="`,
+			end:      `">`,
+			expected: "first.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractHref(tt.input, tt.start, tt.end)
+			if result != tt.expected {
+				t.Errorf("extractHref() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}

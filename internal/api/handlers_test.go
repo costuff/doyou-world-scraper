@@ -60,7 +60,12 @@ func setupTestApp() *fiber.App {
 	api.Get("/jobs/:id", handlers.HandleGetJob)
 	api.Post("/jobs/:id/cancel", handlers.HandleCancelJob)
 
+	api.Get("/tracks", handlers.HandleGetTracks)
+	api.Get("/tracks/status", handlers.HandleGetTracksStatus)
+	api.Get("/tracks/stream", handlers.HandleStreamTrack)
 	api.Get("/tracks/analyzed", handlers.HandleGetAnalyzedTracks)
+	api.Post("/tracks/analyze", handlers.HandleAnalyzeTrack)
+	api.Post("/tracks/analyze-all", handlers.HandleAnalyzeAll)
 
 	return app
 }
