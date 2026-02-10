@@ -184,7 +184,7 @@ func TestTimeoutBehavior(t *testing.T) {
 	})
 
 	t.Run("scrapeSingleDateWithContext respects timeout", func(t *testing.T) {
-		// Skip by default - network test  
+		// Skip by default - network test
 		t.Skip("Skipping network test - run manually if needed")
 
 		// Skip in short mode - requires actual network call
