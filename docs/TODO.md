@@ -62,7 +62,7 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] **Frontend Test Suite (PRIORITY 3)** - Install Vitest + React Testing Library + jsdom, add comprehensive tests for all components, hooks, and services (currently 0% coverage)
 - [ ] Music library analysis and visualization dashboard (PRIORITY 4 - graph-based browsing)
 
-### Music Metadata & Analysis (NEW - PRIORITY 1)
+### Music Metadata & Analysis (Basic)
 - [x] **FIX AUDIO ANALYSIS JSON PARSING** - Fixed librosa warnings and Python path detection
   - Issue: librosa FutureWarning going to stdout, breaking JSON parsing
   - Solution: Suppressed warnings, redirected progress to stderr, added --quiet flag
@@ -70,86 +70,103 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] **High-level Audio Features** - Compute Spotify-like features from low-level audio data
   - Energy, Danceability, Valence, Acousticness, Instrumentalness, Speechiness, Liveness, Melodicness
   - All normalized to 0-1 range matching frontend expectations
-- [ ] **PostgreSQL Background Analysis Worker (PRIORITY 4)** - Process entire library in background
-  - Add PostgreSQL to docker-compose.yml
-  - Create tracks table schema (id, file_path, file_name, analyzed_at, bpm, key, duration, all audio features)
-  - Background worker endpoint: POST /api/v1/analysis/start-background
-  - Scans downloads folder, queues unanalyzed tracks
-  - Analyzes tracks sequentially or in parallel batches
-  - Stores results in PostgreSQL for instant frontend queries
-  - New endpoints:
-    - GET /api/v1/tracks?filter=analyzed - List all analyzed tracks
-    - GET /api/v1/tracks/:id/analysis - Get cached analysis
-    - GET /api/v1/analysis/stats - Show progress (X/9875 analyzed)
-  - **CV Keywords**: PostgreSQL, background workers, batch processing, database schema design
-- [ ] **Advanced Metadata Extraction** - Extract comprehensive audio features from downloaded tracks:
-  - Album name and artwork
-  - Release date
-  - Label
-  - BPM (beats per minute)
-  - Musical key and mode
-  - **Audio Features (Shazam-style analysis)**:
-    - **Melodicness** - Clear and memorable tune with well-defined musical patterns
-    - **Acousticness** - Reliance on acoustic vs electronic instruments
-    - **Valence** - Musical positivity/emotional tone (happiness vs sadness)
-    - **Danceability** - Tempo stability, rhythmic patterns, beat emphasis
-    - **Energy** - Perceived intensity based on tempo, dynamics, and musical density
-    - **Instrumentalness** - Likelihood of being instrumental vs vocal
-    - **Speechiness** - Presence of spoken words
-    - **Liveness** - Presence of live audience
-- [ ] **Music Analysis Engine** - Build analysis system to process all 9,875 tracks
-  - Batch processing with progress tracking
-  - Store metadata in database (SQLite or PostgreSQL)
-  - Cache analysis results to avoid re-processing
-- [ ] **Visualization Dashboard** - Create interactive data visualizations:
-  - **Genre Distribution** - Pie chart or treemap of music genres
-  - **Audio Features Graphs**:
-    - Scatter plots (Energy vs Danceability, Valence vs Energy, etc.)
-    - Radar charts for track profiles
-    - Heatmaps showing feature correlations
-  - **Timeline Visualizations** - Track releases over time, genre trends
-  - **BPM Distribution** - Histogram of tempo ranges
-  - **Label Analytics** - Top labels, release counts
-  - **Interactive Filtering** - Click to filter by genre, features, date ranges
-  - **Spectrograms** - Visual frequency/time representation of audio for individual tracks
-    - Mel spectrogram visualization for each song
-    - Interactive spectrogram viewer with playback sync
-    - Compare spectrograms between similar tracks
-- [ ] **Music Recommendation System** - Suggest similar tracks based on audio features
-- [ ] **Playlist Generation** - Auto-create playlists by mood, energy, genre clusters
+- [x] **Single Track Analysis** - API endpoint for analyzing individual tracks (for preview/testing)
+  - POST /api/v1/tracks/analyze - Analyze single track, save companion JSON
+  - GET /api/v1/tracks/analyzed - List tracks with analysis data
+  - Basic visualization in frontend Analytics tab
+- [ ] **Current Repo Scope** - Keep this repo lightweight for Raspberry Pi deployment
+  - Focus: Web scraping, track downloading, file management, basic metadata
+  - NOT included: Batch audio analysis (CPU-intensive, 9,875 tracks)
+  - See "Separate Analytics Project" section below for heavy computation
 
-### Separate Analytics Project (NEW)
-- [ ] **Create doyou-music-analytics repository** - Separate repo for audio analysis and visualizations
-- [ ] **Phase 1: Shared PostgreSQL Database** - Both services read/write to shared PostgreSQL
-  - Design schema for tracks, metadata, audio features
-  - Scraper writes: basic track info, download status
-  - Analytics writes: BPM, key, energy, danceability, etc.
-- [ ] **Phase 2: Event-Driven Architecture with Redis** - Decouple services with pub/sub messaging
-  - Scraper publishes: track_downloaded, track_updated events
-  - Analytics subscribes: processes new tracks for audio analysis
-  - Redis pub/sub for real-time event streaming
-  - Async job processing with retries
-- [ ] **CV Keywords**: Event-driven, microservices, pub/sub, message queue, PostgreSQL, Redis, async processing
+### Separate Analytics Project (NEW - Deploy on Powerful Machine)
+**Rationale**: Audio analysis with librosa is CPU-intensive (9,875 tracks). Raspberry Pi cannot handle batch processing. Split into two services:
+- **This repo (doyou-world-scraper)**: Lightweight scraper/downloader on Raspberry Pi
+- **New repo (doyou-music-analytics)**: Heavy audio processing on powerful machine (desktop/server)
+
+#### Architecture Options:
+
+**Option A: Shared Network Storage (Simplest)**
+- [ ] Scraper saves tracks to NAS (already implemented)
+- [ ] Analytics service mounts same NAS, reads tracks directly
+- [ ] Analytics writes companion JSON files next to MP3s
+- [ ] Scraper frontend reads JSON files via NFS/SMB for visualization
+- **Pros**: No API needed, file-based communication, simple
+- **Cons**: Requires shared filesystem, tight coupling
+
+**Option B: REST API Communication**
+- [ ] Scraper exposes API: GET /api/tracks (list tracks needing analysis)
+- [ ] Analytics polls scraper API, downloads tracks via HTTP
+- [ ] Analytics POSTs results back: POST /api/tracks/:id/analysis
+- [ ] Scraper stores analysis in local DB or JSON files
+- **Pros**: No shared storage needed, loosely coupled
+- **Cons**: Network bandwidth for transferring audio files
+
+**Option C: Shared PostgreSQL Database (Recommended)**
+- [ ] **Create doyou-music-analytics repository** - Separate repo for audio analysis
+- [ ] **Phase 1: Shared PostgreSQL** - Both services connect to same DB
+  - Scraper writes: track metadata (file_path, file_name, download_date, title, artist)
+  - Analytics reads: tracks WHERE analyzed_at IS NULL
+  - Analytics writes: audio features (bpm, key, energy, danceability, etc.)
+  - Schema: `tracks` table with columns for basic info + audio features
+  - Analytics accesses audio files via NAS mount or S3-compatible storage
+- [ ] **Phase 2: Event-Driven with Redis** (Future Enhancement)
+  - Scraper publishes: `track_downloaded` event to Redis pub/sub
+  - Analytics subscribes: processes new tracks automatically
+  - Async job queue with retries for failed analyses
+  - Real-time progress updates via WebSocket
+- [ ] **Analytics Service Features**:
+  - Background worker processes entire library (9,875 tracks)
+  - Batch processing with configurable parallelism
+  - Progress tracking: X/9875 tracks analyzed
+  - API endpoints: GET /api/tracks/analyzed, GET /api/analysis/stats
+  - Web UI for monitoring analysis progress
+- [ ] **Visualization Dashboard** (in Analytics repo):
+  - Energy vs Danceability scatter plots
+  - BPM distribution histogram, Key/mode distribution
+  - Timeline visualizations (releases over time, genre trends)
+  - Interactive filtering by audio features
+  - Spectrograms, radar charts, heatmaps
+  - Music recommendation system (similar tracks)
+  - Playlist generation by mood/energy/genre
+- [ ] **CV Keywords**: Microservices, PostgreSQL, Redis pub/sub, event-driven architecture, batch processing, file storage patterns, distributed systems
 
 ## Next Steps Priority Order
-1. **🔴 FIX CHROME CRASHES (PRIORITY 1 - CRITICAL)** - Memory leaks causing scraper crashes during month/year scrapes
-   - Create new Chrome context per date (not reusing across pages) for immediate cleanup
-   - Add 30s timeouts to prevent hanging contexts
-   - Configure Chrome with memory limits (disable-images, minimal cache)
-   - Limit concurrent scraping jobs (max 2 Chrome instances with semaphore)
-   - Improve job cancellation to force immediate Chrome cleanup
-   - **See**: docs/CHROME_CRASH_FIX.md for detailed implementation guide
-2. **🧪 Comprehensive Test Coverage (PRIORITY 2)** - Increase test coverage from 61.5% to 80%+ to prevent runtime errors
+
+### Current Repo (doyou-world-scraper) - Raspberry Pi Deployment
+1. **✅ FIX CHROME CRASHES (COMPLETED)** - Memory leaks fixed in v1.1.1
+2. **🧪 Comprehensive Test Coverage (PRIORITY 1)** - Increase from 62% to 80%+
    - Backend: Add tests for internal/api (51.8%), internal/jobs (53.7%), internal/storage (53.2%), internal/scraper (60.3%)
-   - Frontend: Set up Vitest + React Testing Library, add tests for components and hooks (currently 0%)
-   - Integration tests: WebSocket connections, API endpoints end-to-end, Docker deployment scenarios
-   - Error scenarios: Network failures, invalid inputs, edge cases that caused previous bugs
-3. **Music Library Visualization Dashboard (PRIORITY 3)** - Interactive graphs with audio features
-   - Energy vs Danceability scatter plots, BPM distribution histogram, Key/mode distribution
-   - Graph-based navigation/browsing replaces traditional track list UI
-   - Click nodes to play tracks, filter by audio features visually
-4. **PostgreSQL Background Analysis Worker (PRIORITY 4)** - Process entire library, cache results in database
-5. **Event-Driven Architecture with Redis (PRIORITY 5)** - Microservices with pub/sub messaging for async processing
+   - Frontend: Set up Vitest + React Testing Library (currently 0% coverage)
+   - Integration tests: WebSocket, API endpoints, Docker scenarios
+   - Error scenarios: Network failures, invalid inputs, edge cases
+3. **🧹 Code Quality (PRIORITY 2)** - Fix linting and error handling
+   - Fix golangci-lint configuration (invalid skip-dirs for v1.64)
+   - Fix all errcheck violations (proper error handling throughout)
+   - Document development workflow
+4. **📊 Basic Visualization (PRIORITY 3)** - Simple charts for analyzed tracks
+   - Bar charts for analyzed tracks count by date
+   - Table view with sortable columns (BPM, Energy, Key)
+   - Keep lightweight for Raspberry Pi
+
+### New Repo (doyou-music-analytics) - Powerful Machine
+1. **🏗️ Project Setup (PRIORITY 1)** - Create new repository
+   - Initialize Go project with similar structure
+   - Add PostgreSQL to docker-compose.yml
+   - Design database schema for tracks + audio features
+2. **🔗 Integration Architecture (PRIORITY 2)** - Choose communication pattern
+   - Decide: Shared NAS, REST API, or PostgreSQL (recommended)
+   - Implement file access (NAS mount or HTTP download)
+   - Test cross-service communication
+3. **⚡ Batch Analysis Worker (PRIORITY 3)** - Process all 9,875 tracks
+   - Background job with progress tracking
+   - Configurable parallelism (4-8 workers)
+   - Store results in PostgreSQL
+4. **📈 Advanced Visualizations (PRIORITY 4)** - Interactive dashboard
+   - Scatter plots, histograms, radar charts, heatmaps
+   - Music recommendation system
+   - Playlist generation by mood/energy
+5. **🔄 Event-Driven Architecture (PRIORITY 5)** - Redis pub/sub for real-time updates
 
 ## Code Quality & Architecture Improvements
 
