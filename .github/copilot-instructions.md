@@ -217,8 +217,9 @@ cd frontend && npm run dev
 2. Implement feature
 3. Ensure tests pass
 4. Check coverage: `go test -cover`
-5. **Update test stats in this file** - Update line 29 with: `go test -v ./... 2>&1 | grep -c "^=== RUN"` and `go test -cover`
-6. Commit with meaningful message
+5. **Bump version numbers** in `VERSION` and `frontend/VERSION` (PATCH for bugs, MINOR for features, MAJOR for breaking changes)
+6. **Update test stats in this file** - Update line 29 with: `go test -v ./... 2>&1 | grep -c "^=== RUN"` and `go test -cover`
+7. Commit with meaningful message (include version in commit if bumped)
 
 **Documentation Maintenance:**
 - **ALWAYS update test coverage statistics** after adding/modifying tests
@@ -323,14 +324,19 @@ func (h *Handlers) HandleSomeAction(c *fiber.Ctx) error {
 - Frontend proxies `/api` requests to backend automatically
 - Stats endpoint checks if NAS exists before scanning
 
-## Version Management (IMPORTANT)
-**ALWAYS increment versions when committing changes:**
+## Version Management (⚠️ CRITICAL - DO THIS BEFORE EVERY COMMIT)
+**ALWAYS increment versions when committing ANY changes - no exceptions:**
 - Backend version: Update `VERSION` file in project root (format: `X.Y.Z`)
 - Frontend version: Update `frontend/VERSION` file (format: `X.Y.Z`)
+- **Keep both files synchronized** - always bump both together to the same version
 - Version format: `MAJOR.MINOR.PATCH` (e.g., `1.0.1` → `1.0.2` for bug fixes)
-- Increment rules:
-  - PATCH (1.0.1 → 1.0.2): Bug fixes, minor changes
-  - MINOR (1.0.2 → 1.1.0): New features, backwards compatible
-  - MAJOR (1.1.0 → 2.0.0): Breaking changes
-- Versions are displayed in the UI footer for deployment tracking
-- Update both files even if only one component changed (keeps them in sync)
+- **Increment rules (follow strictly):**
+  - PATCH (1.0.1 → 1.0.2): Bug fixes, performance improvements, minor refactors
+  - MINOR (1.0.2 → 1.1.0): New features, new endpoints, significant enhancements (backwards compatible)
+  - MAJOR (1.1.0 → 2.0.0): Breaking API changes, major architecture changes
+- **Why this matters:**
+  - Versions are displayed in the UI footer for deployment tracking
+  - Watchtower uses image changes to trigger deployments
+  - Version files are included in Docker images and read at runtime
+  - Helps track which code is running in production
+- **Before every commit:** Open both `VERSION` and `frontend/VERSION`, increment appropriately, save, then commit
