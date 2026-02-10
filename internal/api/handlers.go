@@ -945,8 +945,17 @@ func (h *Handlers) HandleAnalyzeTrack(c *fiber.Ctx) error {
 			return
 		}
 
+		// Save analysis to companion JSON file
+		baseName := strings.TrimSuffix(req.FilePath, filepath.Ext(req.FilePath))
+		jsonPath := baseName + ".json"
+		if err := os.WriteFile(jsonPath, output, 0644); err != nil {
+			logger.Errorf("Failed to save analysis JSON: %v (path: %s)", err, jsonPath)
+			// Don't fail the job, just log the error
+		}
+
 		job.Complete(fiber.Map{
-			"analysis": analysis,
+			"analysis":  analysis,
+			"json_path": jsonPath,
 		})
 	}()
 
@@ -996,29 +1005,65 @@ func (h *Handlers) HandleAnalyzeAll(c *fiber.Ctx) error {
 			scriptPath = "/app/scripts/analyze_audio.py"
 		}
 
-		outputPath := filepath.Join(downloadsDir, "..", "audio_analysis.json")
-		if fileExists("/app/data") {
-			outputPath = "/app/data/audio_analysis.json"
-		}
-
-		args := []string{scriptPath, downloadsDir, "-o", outputPath}
-		if req.GenerateSpectrograms {
-			args = append(args, "--spectrogram")
-		}
-
-		// Run analysis with progress tracking
-		job.UpdateProgressWithMessage(0, "Starting batch analysis...")
-
-		cmd := exec.Command(pythonPath, args...)
-		output, err := cmd.CombinedOutput()
+		// Get all MP3 files in downloads directory
+		mp3Files, err := filepath.Glob(filepath.Join(downloadsDir, "*.mp3"))
 		if err != nil {
-			job.Fail(fmt.Sprintf("Batch analysis failed: %v - %s", err, string(output)))
+			job.Fail(fmt.Sprintf("Failed to list MP3 files: %v", err))
 			return
 		}
 
+		if len(mp3Files) == 0 {
+			job.Complete(fiber.Map{
+				"message":        "No MP3 files found to analyze",
+				"analyzed_count": 0,
+			})
+			return
+		}
+
+		job.UpdateProgressWithMessage(0, fmt.Sprintf("Found %d tracks to analyze", len(mp3Files)))
+
+		analyzed := 0
+		failed := 0
+		skipped := 0
+
+		for i, mp3Path := range mp3Files {
+			// Check if already analyzed (JSON exists)
+			baseName := strings.TrimSuffix(mp3Path, filepath.Ext(mp3Path))
+			jsonPath := baseName + ".json"
+			if fileExists(jsonPath) {
+				skipped++
+				continue
+			}
+
+			// Update progress
+			progress := int((float64(i) / float64(len(mp3Files))) * 100)
+			job.UpdateProgressWithMessage(progress, fmt.Sprintf("Analyzing %d/%d: %s", i+1, len(mp3Files), filepath.Base(mp3Path)))
+
+			// Run analysis for this file
+			cmd := exec.Command(pythonPath, scriptPath, "--single", "--quiet", "--quick", mp3Path)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				logger.Errorf("Failed to analyze track %s: %v", mp3Path, err)
+				failed++
+				continue
+			}
+
+			// Save companion JSON file
+			if err := os.WriteFile(jsonPath, output, 0644); err != nil {
+				logger.Errorf("Failed to save analysis JSON %s: %v", jsonPath, err)
+				failed++
+				continue
+			}
+
+			analyzed++
+		}
+
 		job.Complete(fiber.Map{
-			"output_file": outputPath,
-			"message":     string(output),
+			"analyzed_count": analyzed,
+			"failed_count":   failed,
+			"skipped_count":  skipped,
+			"total_files":    len(mp3Files),
+			"message":        fmt.Sprintf("Analyzed %d tracks (%d skipped, %d failed)", analyzed, skipped, failed),
 		})
 	}()
 
