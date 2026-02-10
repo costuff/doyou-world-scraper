@@ -4,13 +4,13 @@ services:
     container_name: doyou-api
     restart: unless-stopped
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "${API_PORT:-3000}:3001"
     volumes:
       - ./csv:/app/csv
       - ./downloads:/app/downloads
       - ${NAS_PATH:-/mnt/music}:/nas
     environment:
-      - PORT=3000
+      - PORT=3001
       - TZ=${TZ:-Europe/Athens}
     networks:
       doyou-network:
@@ -21,7 +21,7 @@ services:
     security_opt:
       - seccomp=unconfined
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
