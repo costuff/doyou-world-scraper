@@ -41,7 +41,7 @@ def timeout(seconds=30):
     return decorator
 
 
-@timeout(60)  # 60 second timeout for loading
+@timeout(180)  # 180 second timeout (3 min) for loading large files
 def extract_audio_features(file_path: str, quiet: bool = False) -> Dict[str, Any]:
     """
     Extract comprehensive audio features from an audio file.
@@ -62,7 +62,7 @@ def extract_audio_features(file_path: str, quiet: bool = False) -> Dict[str, Any
     # Load audio file with timeout protection
     try:
         log("Loading audio file...")
-        y, sr = librosa.load(file_path, sr=22050, duration=120, mono=True)  # Force 22.05kHz, mono
+        y, sr = librosa.load(file_path, sr=22050, duration=60, mono=True)  # Load first 60s only (faster)
         log(f"Audio loaded: {len(y)/sr:.1f}s at {sr}Hz")
     except TimeoutError as e:
         return {"error": f"Audio loading timed out: {str(e)}"}
