@@ -199,9 +199,9 @@ cd frontend && npm run dev
 - Run: `go test ./internal/... ./api/...`
 - Coverage: `go test -cover ./internal/... ./api/...`
 - Count tests: `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"`
-- **Current Stats**: 290+ test cases, ~65% average coverage
-  - cmd/api: 1 test, 0.0% (main not testable)
-  - internal/api: 50 tests (including NAS path detection and resolution), 52.5%
+  - **Current Stats**: 376 test cases, ~63% average coverage
+    - cmd/api: 1 test, 0.0% (main not testable)
+    - internal/api: 51 tests (including analyzed tracks endpoint), 61.1%
   - internal/config: 18 tests, 96.4%
   - internal/downloader: 79 tests, 69.7%
   - internal/jobs: 26 tests (includes extended lifecycle, cancellation, concurrency tests), 58.0%

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -57,6 +59,8 @@ func setupTestApp() *fiber.App {
 	api.Get("/jobs", handlers.HandleGetJobs)
 	api.Get("/jobs/:id", handlers.HandleGetJob)
 	api.Post("/jobs/:id/cancel", handlers.HandleCancelJob)
+
+	api.Get("/tracks/analyzed", handlers.HandleGetAnalyzedTracks)
 
 	return app
 }
@@ -664,6 +668,93 @@ func TestDownloadAllEndpoint(t *testing.T) {
 	if job, ok := result["job"].(map[string]interface{}); ok {
 		if job["type"] != "download_all" {
 			t.Error("Job type should be 'download_all'")
+		}
+	}
+}
+
+func TestGetAnalyzedTracksEndpoint(t *testing.T) {
+	app := setupTestApp()
+
+	// Create test data: MP3 file with companion JSON
+	downloadsDir := "./test_data/downloads"
+	os.MkdirAll(downloadsDir, 0755)
+
+	// Create a test MP3 file (minimal valid MP3 header)
+	testMP3Path := filepath.Join(downloadsDir, "test_track.mp3")
+	testMP3Data := []byte{
+		0xFF, 0xFB, 0x90, 0x00, // MP3 sync word and header
+		0x00, 0x00, 0x00, 0x00,
+	}
+	if err := os.WriteFile(testMP3Path, testMP3Data, 0644); err != nil {
+		t.Fatalf("Failed to create test MP3: %v", err)
+	}
+	defer os.Remove(testMP3Path)
+
+	// Create companion JSON analysis file
+	testJSONPath := filepath.Join(downloadsDir, "test_track.json")
+	testAnalysis := map[string]interface{}{
+		"bpm":          128.5,
+		"key":          "C major",
+		"energy":       0.85,
+		"danceability": 0.72,
+		"valence":      0.68,
+		"acousticness": 0.12,
+	}
+	jsonData, _ := json.Marshal(testAnalysis)
+	if err := os.WriteFile(testJSONPath, jsonData, 0644); err != nil {
+		t.Fatalf("Failed to create test JSON: %v", err)
+	}
+	defer os.Remove(testJSONPath)
+
+	// Test the endpoint
+	req := httptest.NewRequest("GET", "/api/v1/tracks/analyzed", nil)
+	resp, err := app.Test(req, 5000)
+
+	if err != nil {
+		t.Fatalf("Error testing analyzed tracks endpoint: %v", err)
+	}
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	// Check tracks array exists
+	tracks, ok := result["tracks"].([]interface{})
+	if !ok {
+		t.Fatal("Expected 'tracks' array in response")
+	}
+
+	// Should have at least 1 track (our test track)
+	if len(tracks) < 1 {
+		t.Error("Expected at least 1 analyzed track")
+	}
+
+	// Check first track structure
+	track := tracks[0].(map[string]interface{})
+	
+	expectedFields := []string{"file_path", "file_name", "analysis"}
+	for _, field := range expectedFields {
+		if _, exists := track[field]; !exists {
+			t.Errorf("Track should include '%s' field", field)
+		}
+	}
+
+	// Verify analysis data structure
+	analysis, ok := track["analysis"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected 'analysis' object in track")
+	}
+
+	expectedAnalysisFields := []string{"bpm", "key", "energy", "danceability", "valence", "acousticness"}
+	for _, field := range expectedAnalysisFields {
+		if _, exists := analysis[field]; !exists {
+			t.Errorf("Analysis should include '%s' field", field)
 		}
 	}
 }

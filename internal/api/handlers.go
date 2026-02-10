@@ -7,6 +7,7 @@ import (
 	"doyou-world-scraper/internal/jobs"
 	"doyou-world-scraper/internal/scraper"
 	"doyou-world-scraper/internal/storage"
+	"doyou-world-scraper/pkg/logger"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -799,6 +800,73 @@ func (h *Handlers) HandleGetTracksStatus(c *fiber.Ctx) error {
 
 	status := storage.GetTrackScanStatus(downloadsDir)
 	return c.JSON(status)
+}
+
+// Get analyzed tracks (tracks with companion .json analysis files)
+func (h *Handlers) HandleGetAnalyzedTracks(c *fiber.Ctx) error {
+	requestedDir := c.Query("downloads_dir", h.cfg.DownloadsDir)
+
+	// Resolve downloads directory (handles Docker, local, NAS)
+	downloadsDir, err := h.resolveDownloadsDir(requestedDir)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error":   err.Error(),
+			"message": "Storage directory not accessible",
+			"hint":    "Set NAS_PATH environment variable or check if NAS is mounted",
+		})
+	}
+
+	// Scan for MP3 files with companion JSON files
+	tracks := []fiber.Map{}
+	
+	entries, err := os.ReadDir(downloadsDir)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to read directory: %v", err),
+		})
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		fileName := entry.Name()
+		// Only process MP3 files
+		if !strings.HasSuffix(strings.ToLower(fileName), ".mp3") {
+			continue
+		}
+
+		// Check for companion JSON file
+		baseName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+		jsonPath := filepath.Join(downloadsDir, baseName+".json")
+
+		if _, err := os.Stat(jsonPath); err == nil {
+			// JSON file exists, read analysis data
+			jsonData, err := os.ReadFile(jsonPath)
+			if err != nil {
+				logger.Errorf("Failed to read analysis file %s: %v", jsonPath, err)
+				continue
+			}
+
+			var analysis map[string]interface{}
+			if err := json.Unmarshal(jsonData, &analysis); err != nil {
+				logger.Errorf("Failed to parse analysis file %s: %v", jsonPath, err)
+				continue
+			}
+
+			tracks = append(tracks, fiber.Map{
+				"file_path": filepath.Join(downloadsDir, fileName),
+				"file_name": fileName,
+				"analysis":  analysis,
+			})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"tracks": tracks,
+		"count":  len(tracks),
+	})
 }
 
 // Serve audio file for playback
