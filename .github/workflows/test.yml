@@ -1,5 +1,6 @@
 name: Test Coverage
 
+# Configured for self-hosted runner
 on:
   push:
     branches: [ main, master, develop ]
