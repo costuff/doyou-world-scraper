@@ -124,7 +124,7 @@ func TestMoveDownloadsToNAS(t *testing.T) {
 		for i := range largeContent {
 			largeContent[i] = byte(i % 256)
 		}
-		
+
 		localFile := filepath.Join(tmpDownloads3, "existing.mp3")
 		nasFile := filepath.Join(tmpNAS3, "existing.mp3")
 		_ = os.WriteFile(localFile, largeContent, 0644)

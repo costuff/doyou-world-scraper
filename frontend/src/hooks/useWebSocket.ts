@@ -7,9 +7,9 @@ const getWebSocketURL = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.host;
   
-  // Use current host for production, localhost:3001 for development
+  // Use current host for production, localhost:3002 for local development
   if (host.includes('localhost') || host.includes('127.0.0.1')) {
-    return 'ws://localhost:3001/api/v1/ws'; // Fixed: was 3000, should be 3001
+    return 'ws://localhost:3002/api/v1/ws'; // Port 3002 for local dev (avoids VS Code conflict)
   }
   
   return `${protocol}//${host}/api/v1/ws`;
