@@ -112,6 +112,51 @@ func TestMoveDownloadsToNAS(t *testing.T) {
 			t.Errorf("Expected 0 files (small file should be skipped), got %d", result.TotalFiles)
 		}
 	})
+
+	t.Run("Skip file already on NAS and delete local copy", func(t *testing.T) {
+		tmpDownloads3 := filepath.Join(t.TempDir(), "downloads3")
+		tmpNAS3 := filepath.Join(t.TempDir(), "nas3")
+		_ = os.MkdirAll(tmpDownloads3, 0755)
+		_ = os.MkdirAll(tmpNAS3, 0755)
+
+		// Create identical file in both locations
+		largeContent := make([]byte, 70000)
+		for i := range largeContent {
+			largeContent[i] = byte(i % 256)
+		}
+		
+		localFile := filepath.Join(tmpDownloads3, "existing.mp3")
+		nasFile := filepath.Join(tmpNAS3, "existing.mp3")
+		_ = os.WriteFile(localFile, largeContent, 0644)
+		_ = os.WriteFile(nasFile, largeContent, 0644)
+
+		result, err := MoveDownloadsToNAS(tmpDownloads3, tmpNAS3, nil, nil)
+		if err != nil {
+			t.Fatalf("MoveDownloadsToNAS failed: %v", err)
+		}
+
+		if result.TotalFiles != 1 {
+			t.Errorf("Expected 1 file, got %d", result.TotalFiles)
+		}
+
+		if result.SkippedFiles != 1 {
+			t.Errorf("Expected 1 skipped file, got %d", result.SkippedFiles)
+		}
+
+		if result.MovedFiles != 0 {
+			t.Errorf("Expected 0 moved files (file already on NAS), got %d", result.MovedFiles)
+		}
+
+		// Verify local file was deleted
+		if _, err := os.Stat(localFile); !os.IsNotExist(err) {
+			t.Error("Local file should be deleted when it already exists on NAS")
+		}
+
+		// Verify NAS file still exists
+		if _, err := os.Stat(nasFile); os.IsNotExist(err) {
+			t.Error("NAS file should still exist")
+		}
+	})
 }
 
 func TestGetTracks(t *testing.T) {
