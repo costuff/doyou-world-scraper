@@ -102,6 +102,12 @@ func RemoveDuplicates(downloadsDir, nasDir string, job *jobs.Job, progressCallba
 		}
 	}
 
+	// Clear track cache for all modified directories
+	clearTrackCache(downloadsDir)
+	if nasDir != "" && nasDir != "skip" {
+		clearTrackCache(nasDir)
+	}
+
 	return result, nil
 }
 
@@ -410,6 +416,18 @@ func setCachedTracks(dir string, tracks []TrackInfo) {
 	trackCacheMu.Lock()
 	defer trackCacheMu.Unlock()
 	trackCache[dir] = trackCacheEntry{Tracks: tracks, CachedAt: time.Now()}
+}
+
+func clearTrackCache(dir string) {
+	trackCacheMu.Lock()
+	defer trackCacheMu.Unlock()
+	delete(trackCache, dir)
+}
+
+func clearTrackScanStatus(dir string) {
+	trackScanMu.Lock()
+	defer trackScanMu.Unlock()
+	delete(trackScanStatus, dir)
 }
 
 func scanAllTracks(downloadsDir string) ([]TrackInfo, error) {
@@ -802,6 +820,10 @@ func ClearDownloads(downloadsDir string) (*ClearDownloadsResult, error) {
 		}
 		result.DeletedFiles++
 	}
+
+	// Clear cached track data for this directory
+	clearTrackCache(downloadsDir)
+	clearTrackScanStatus(downloadsDir)
 
 	return result, nil
 }
