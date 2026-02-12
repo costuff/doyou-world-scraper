@@ -51,6 +51,9 @@ export const apiService = {
   clearDownloads: () =>
     api.post<{ message: string; job: Job }>('/util/clear-downloads', {}),
   
+  clearNASDownloads: (nasDir: string) =>
+    api.post<{ message: string; job: Job }>('/util/clear-nas-downloads', { nas_dir: nasDir }),
+  
   getStats: () =>
     api.get<Stats>('/util/stats'),
 
@@ -110,6 +113,35 @@ export const apiService = {
     } catch (error) {
       console.error('Analytics API not available:', error);
       return { data: null };
+    }
+  },
+  
+  // Check which filenames have been analyzed
+  checkAnalyzedTracks: async (filenames: string[]) => {
+    try {
+      // Query analytics API for each filename
+      const results = await Promise.all(
+        filenames.map(async (filename) => {
+          try {
+            const response = await axios.get(`${ANALYTICS_API_URL}/api/v1/tracks/search?q=${encodeURIComponent(filename)}`);
+            const tracks = response.data?.tracks || [];
+            // Check if any track with this filename has been analyzed
+            const analyzed = tracks.some((track: any) => 
+              track.file_name === filename && track.analysis_status === 'completed'
+            );
+            return { filename, analyzed };
+          } catch {
+            return { filename, analyzed: false };
+          }
+        })
+      );
+      return results.reduce((acc, { filename, analyzed }) => {
+        acc[filename] = analyzed;
+        return acc;
+      }, {} as Record<string, boolean>);
+    } catch (error) {
+      console.error('Failed to check analyzed tracks:', error);
+      return {};
     }
   },
 };

@@ -82,6 +82,7 @@ func main() {
 	utilGroup.Post("/match", handlers.HandleMatchDownloads)
 	utilGroup.Post("/clear-csvs", handlers.HandleClearCSVs)
 	utilGroup.Post("/clear-downloads", handlers.HandleClearDownloads)
+	utilGroup.Post("/clear-nas-downloads", handlers.HandleClearNASDownloads)
 	utilGroup.Get("/stats", handlers.HandleStats)
 
 	// Track browsing endpoints

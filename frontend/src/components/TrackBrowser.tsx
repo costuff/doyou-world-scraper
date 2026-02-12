@@ -19,6 +19,7 @@ export default function TrackBrowser() {
   const [scanStatus, setScanStatus] = useState<TrackScanStatus | null>(null);
   const [analyzing, setAnalyzing] = useState<Set<string>>(new Set());
   const [expandedTrack, setExpandedTrack] = useState<string | null>(null);
+  const [analyzedTracks, setAnalyzedTracks] = useState<Record<string, boolean>>({});
   const [nasPath, setNasPath] = useState<string>(() => {
     return localStorage.getItem('nasPath') || '/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks';
   });
@@ -42,6 +43,14 @@ export default function TrackBrowser() {
       setTracks(response.data.tracks || []);
       setTotal(response.data.total);
       setTotalPages(response.data.total_pages);
+      
+      // Check which tracks have been analyzed in analytics service
+      const filenames = (response.data.tracks || []).map((t: TrackInfo) => t.filename);
+      if (filenames.length > 0) {
+        const analyzedStatus = await apiService.checkAnalyzedTracks(filenames);
+        setAnalyzedTracks(analyzedStatus);
+      }
+      
       if (response.data.in_progress) {
         setScanStatus({
           in_progress: true,
@@ -345,20 +354,29 @@ export default function TrackBrowser() {
                         >
                           ▶
                         </button>
-                        <button
-                          onClick={() => handleAnalyzeTrack(track)}
-                          disabled={analyzing.has(track.file_path)}
-                          className={`px-2 py-1 text-xs rounded transition ${
-                            analyzing.has(track.file_path)
-                              ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                              : track.analysis
-                              ? 'bg-green-600 hover:bg-green-700 text-white'
-                              : 'bg-purple-600 hover:bg-purple-700 text-white'
-                          }`}
-                          title={track.analysis ? 'Re-analyze' : 'Analyze audio'}
-                        >
-                          {analyzing.has(track.file_path) ? '...' : track.analysis ? '✓' : '🎵'}
-                        </button>
+                        {analyzedTracks[track.filename] ? (
+                          <div
+                            className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 border border-green-600 flex items-center gap-1"
+                            title="Analyzed in analytics service"
+                          >
+                            ✓ Analyzed
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleAnalyzeTrack(track)}
+                            disabled={analyzing.has(track.file_path)}
+                            className={`px-2 py-1 text-xs rounded transition ${
+                              analyzing.has(track.file_path)
+                                ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                                : track.analysis
+                                ? 'bg-green-600 hover:bg-green-700 text-white'
+                                : 'bg-purple-600 hover:bg-purple-700 text-white'
+                            }`}
+                            title={track.analysis ? 'Re-analyze' : 'Analyze audio'}
+                          >
+                            {analyzing.has(track.file_path) ? '...' : track.analysis ? '✓' : '🎵'}
+                          </button>
+                        )}
                         {track.analysis && (
                           <button
                             onClick={() => setExpandedTrack(expandedTrack === track.file_path ? null : track.file_path)}

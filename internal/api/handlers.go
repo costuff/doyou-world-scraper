@@ -605,6 +605,63 @@ func (h *Handlers) HandleClearDownloads(c *fiber.Ctx) error {
 	})
 }
 
+func (h *Handlers) HandleClearNASDownloads(c *fiber.Ctx) error {
+	type Request struct {
+		NASDir string `json:"nas_dir"`
+	}
+
+	req := new(Request)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	nasDir := req.NASDir
+	if nasDir == "" {
+		// Try to auto-detect NAS path
+		if fileExists("/nas") {
+			nasDir = "/nas"
+		} else if h.cfg.NASPath != "" {
+			nasDir = h.cfg.NASPath
+		} else {
+			return c.Status(400).JSON(fiber.Map{
+				"error":   "NAS path not provided",
+				"message": "Please provide nas_dir in request body or set NAS_PATH environment variable",
+			})
+		}
+	}
+
+	// Verify NAS directory exists
+	if _, err := os.Stat(nasDir); os.IsNotExist(err) {
+		return c.Status(404).JSON(fiber.Map{
+			"error":   fmt.Sprintf("NAS directory does not exist: %s", nasDir),
+			"message": "Check NAS mount path or set NAS_PATH environment variable",
+		})
+	}
+
+	job := jobs.NewJob("clear_nas_downloads", fiber.Map{
+		"nas_dir": nasDir,
+	})
+
+	go func() {
+		job.Start()
+		result, err := storage.ClearDownloads(nasDir)
+		if err != nil {
+			job.Fail(fmt.Sprintf("Clear NAS downloads failed: %v", err))
+			return
+		}
+		job.Complete(fiber.Map{
+			"total_files":   result.TotalFiles,
+			"deleted_files": result.DeletedFiles,
+			"errors":        result.Errors,
+		})
+	}()
+
+	return c.Status(202).JSON(fiber.Map{
+		"message": "Clearing NAS downloaded files",
+		"job":     job.ToMap(),
+	})
+}
+
 func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 	stats := fiber.Map{
 		"total_csvs":           0,

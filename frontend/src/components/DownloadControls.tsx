@@ -104,6 +104,28 @@ export const DownloadControls = () => {
     }
   };
 
+  const handleClearNASDownloads = async () => {
+    if (!nasPath) {
+      setMessage({ type: 'error', text: 'Please enter a NAS path first' });
+      return;
+    }
+    
+    if (!window.confirm(`Are you sure you want to delete ALL MP3 files from NAS (${nasPath})? This cannot be undone!`)) {
+      return;
+    }
+    
+    setLoading('clear-nas-downloads');
+    setMessage(null);
+    try {
+      const response = await apiService.clearNASDownloads(nasPath);
+      setMessage({ type: 'success', text: `Clear NAS downloads started! Job ID: ${response.data.job.id}` });
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to clear NAS downloads' });
+    } finally {
+      setLoading(null);
+    }
+  };
+
   return (
     <div className="bg-slate-800 rounded-lg p-6 shadow-lg border border-slate-700">
       <h2 className="text-2xl font-bold text-white mb-6">Downloads & Utilities</h2>
@@ -195,6 +217,17 @@ export const DownloadControls = () => {
           <div className="flex justify-between items-center">
             <span>{loading === 'clear-downloads' ? 'Deleting...' : 'Clear All Downloads'}</span>
             <span className="text-sm opacity-70">⚠️ Delete ALL MP3 files</span>
+          </div>
+        </button>
+
+        <button
+          onClick={handleClearNASDownloads}
+          disabled={!!loading || !nasPath}
+          className="w-full px-4 py-3 bg-red-800 hover:bg-red-900 disabled:bg-slate-600 text-white rounded font-medium transition-colors text-left border-2 border-red-500"
+        >
+          <div className="flex justify-between items-center">
+            <span>{loading === 'clear-nas-downloads' ? 'Deleting NAS...' : 'Clear NAS Downloads'}</span>
+            <span className="text-sm opacity-70">⚠️ Delete ALL NAS MP3 files</span>
           </div>
         </button>
       </div>
