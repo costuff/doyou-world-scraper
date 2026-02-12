@@ -587,7 +587,10 @@ func (h *Handlers) HandleClearDownloads(c *fiber.Ctx) error {
 
 	go func() {
 		job.Start()
-		result, err := storage.ClearDownloads(downloadsDir)
+		result, err := storage.ClearDownloads(downloadsDir, func(current, total int, filename string) {
+			progress := int(float64(current) / float64(total) * 100)
+			job.UpdateProgressWithMessage(progress, fmt.Sprintf("Deleting %d/%d: %s", current, total, filename))
+		})
 		if err != nil {
 			job.Fail(fmt.Sprintf("Clear downloads failed: %v", err))
 			return
@@ -644,7 +647,10 @@ func (h *Handlers) HandleClearNASDownloads(c *fiber.Ctx) error {
 
 	go func() {
 		job.Start()
-		result, err := storage.ClearDownloads(nasDir)
+		result, err := storage.ClearDownloads(nasDir, func(current, total int, filename string) {
+			progress := int(float64(current) / float64(total) * 100)
+			job.UpdateProgressWithMessage(progress, fmt.Sprintf("Deleting %d/%d: %s", current, total, filename))
+		})
 		if err != nil {
 			job.Fail(fmt.Sprintf("Clear NAS downloads failed: %v", err))
 			return

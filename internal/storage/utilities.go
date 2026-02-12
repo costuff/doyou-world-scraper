@@ -787,7 +787,7 @@ type ClearDownloadsResult struct {
 }
 
 // ClearDownloads removes all MP3 files from the downloads directory
-func ClearDownloads(downloadsDir string) (*ClearDownloadsResult, error) {
+func ClearDownloads(downloadsDir string, progressCallback func(current, total int, filename string)) (*ClearDownloadsResult, error) {
 	result := &ClearDownloadsResult{}
 
 	// Check if directory exists
@@ -813,12 +813,17 @@ func ClearDownloads(downloadsDir string) (*ClearDownloadsResult, error) {
 	result.TotalFiles = len(files)
 
 	// Delete each MP3 file
-	for _, file := range files {
+	for i, file := range files {
 		if err := os.Remove(file); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("Failed to delete %s: %v", filepath.Base(file), err))
 			continue
 		}
 		result.DeletedFiles++
+		
+		// Report progress every 10 files or on last file
+		if progressCallback != nil && (i%10 == 0 || i == len(files)-1) {
+			progressCallback(i+1, len(files), filepath.Base(file))
+		}
 	}
 
 	// Clear cached track data for this directory

@@ -333,7 +333,7 @@ func TestClearDownloadsEdgeCases(t *testing.T) {
 
 	t.Run("Non-existent directory", func(t *testing.T) {
 		nonExistent := filepath.Join(tmpDir, "nonexistent")
-		result, err := ClearDownloads(nonExistent)
+		result, err := ClearDownloads(nonExistent, nil)
 		if err == nil {
 			t.Error("Expected error for non-existent directory")
 		}
@@ -346,7 +346,7 @@ func TestClearDownloadsEdgeCases(t *testing.T) {
 		emptyDir := filepath.Join(tmpDir, "empty")
 		os.MkdirAll(emptyDir, 0755)
 
-		result, err := ClearDownloads(emptyDir)
+		result, err := ClearDownloads(emptyDir, nil)
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
@@ -363,7 +363,7 @@ func TestClearDownloadsEdgeCases(t *testing.T) {
 		os.WriteFile(failedCSV, []byte("track,artist\n"), 0644)
 		os.WriteFile(filepath.Join(dir, "track1.mp3"), []byte("audio"), 0644)
 
-		result, err := ClearDownloads(dir)
+		result, err := ClearDownloads(dir, nil)
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}

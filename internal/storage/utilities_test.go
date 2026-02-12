@@ -401,7 +401,7 @@ func TestClearDownloads(t *testing.T) {
 			t.Fatalf("Failed to create txt file: %v", err)
 		}
 
-		result, err := ClearDownloads(tmpDir)
+		result, err := ClearDownloads(tmpDir, nil)
 		if err != nil {
 			t.Fatalf("ClearDownloads failed: %v", err)
 		}
@@ -432,7 +432,7 @@ func TestClearDownloads(t *testing.T) {
 	t.Run("handles empty directory", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
-		result, err := ClearDownloads(tmpDir)
+		result, err := ClearDownloads(tmpDir, nil)
 		if err != nil {
 			t.Fatalf("ClearDownloads failed: %v", err)
 		}
@@ -446,7 +446,7 @@ func TestClearDownloads(t *testing.T) {
 	})
 
 	t.Run("returns error for non-existent directory", func(t *testing.T) {
-		_, err := ClearDownloads("/nonexistent/directory")
+		_, err := ClearDownloads("/nonexistent/directory", nil)
 		if err == nil {
 			t.Error("Expected error for non-existent directory")
 		}
@@ -472,7 +472,7 @@ func TestClearDownloads(t *testing.T) {
 			}
 		}
 
-		result, err := ClearDownloads(tmpDir)
+		result, err := ClearDownloads(tmpDir, nil)
 		if err != nil {
 			t.Fatalf("ClearDownloads failed: %v", err)
 		}
@@ -496,7 +496,7 @@ func TestClearDownloads(t *testing.T) {
 			}
 		}
 
-		result, err := ClearDownloads(tmpDir)
+		result, err := ClearDownloads(tmpDir, nil)
 		if err != nil {
 			t.Fatalf("ClearDownloads failed: %v", err)
 		}
@@ -518,7 +518,7 @@ func TestClearDownloads(t *testing.T) {
 		os.WriteFile(filepath.Join(tmpDir, "notes.txt"), []byte("txt"), 0644)
 		os.WriteFile(filepath.Join(tmpDir, "tracks.csv"), []byte("csv"), 0644)
 
-		result, err := ClearDownloads(tmpDir)
+		result, err := ClearDownloads(tmpDir, nil)
 		if err != nil {
 			t.Fatalf("ClearDownloads failed: %v", err)
 		}
