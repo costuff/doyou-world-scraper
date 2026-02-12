@@ -59,6 +59,14 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [x] Statistics dashboard (track counts, storage usage, date ranges)
 - [x] Fix frontend not updating properly - Optimized stats refresh (30s→5s), removed expensive JSON comparisons, added React.memo
 - [x] **Version footer** - Add footer component showing deployed backend and frontend versions for version tracking
+- [x] **✅ ANALYTICS INTEGRATION (v1.4.0)** - Connect scraper dashboard to analytics service
+  - Display real-time analytics statistics in StatsPanel
+  - Total tracks, completed, pending, analyzing, failed counts
+  - Processing rate (tracks/hour) and completion percentage
+  - Color-coded status indicators (green/yellow/cyan/red)
+  - Auto-refresh every 5 seconds
+  - Graceful degradation if analytics service unavailable
+  - See docs/ANALYTICS_INTEGRATION.md for setup
 - [ ] **Frontend Test Suite (PRIORITY 3)** - Install Vitest + React Testing Library + jsdom, add comprehensive tests for all components, hooks, and services (currently 0% coverage)
 - [ ] Music library analysis and visualization dashboard (PRIORITY 4 - graph-based browsing)
 
@@ -95,13 +103,18 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - **Cons**: Requires shared filesystem, tight coupling
 
 **Option B: REST API Communication**
-- [ ] Scraper exposes API: GET /api/tracks (list tracks needing analysis)
-- [ ] Analytics polls scraper API, downloads tracks via HTTP
-- [ ] Analytics POSTs results back: POST /api/tracks/:id/analysis
-- [ ] Scraper stores analysis in local DB or JSON files
-- **Pros**: No shared storage needed, loosely coupled
-- **Cons**: Network bandwidth for transferring audio files
-
+- [x] **✅ Create doyou-music-analytics repository (v0.6.0 COMPLETE)** - Separate repo for audio analysis
+- [x] **✅ Phase 1: Shared PostgreSQL (DEPLOYED)** - Both services connect to same DB
+  - Scraper writes: track metadata (file_path, file_name, download_date, title, artist)
+  - Analytics reads: tracks WHERE analyzed_at IS NULL
+  - Analytics writes: audio features (bpm, key, energy, danceability, etc.)
+  - Schema: `tracks` table with columns for basic info + audio features
+  - Analytics accesses audio files via NAS mount
+  - **Status**: 3,752 tracks imported, 135 completed, analysis workers running
+- [x] **✅ Analytics Service Dashboard Integration (v1.4.0)** - Display analytics in scraper UI
+  - Real-time stats display in StatsPanel component
+  - Processing rate, completion %, status breakdown
+  - Auto-refresh every 5 seconds
 **Option C: Shared PostgreSQL Database (Recommended)**
 - [ ] **Create doyou-music-analytics repository** - Separate repo for audio analysis
 - [ ] **Phase 1: Shared PostgreSQL** - Both services connect to same DB
