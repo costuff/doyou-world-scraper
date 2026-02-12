@@ -10,11 +10,11 @@ export const AnalyticsDashboard = () => {
   const fetchAnalyzedTracks = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getAnalyzedTracks(500);
+      const response = await apiService.getAnalyzedTracks();
       if (response?.data) {
-        // Analytics service returns { tracks: [...], total, limit, offset }
+        // Analytics service returns { tracks: [...], total }
         const apiTracks = response.data.tracks || [];
-        console.log(`Loaded ${apiTracks.length} analyzed tracks from analytics service`);
+        console.log(`Loaded ${apiTracks.length} of ${response.data.total} analyzed tracks from analytics service`);
         
         // Map the analytics API format to our frontend format
         // Analytics API has 'features' field, we need 'analysis'

@@ -85,12 +85,37 @@ export const apiService = {
   getStreamUrl: (filePath: string) =>
     `${API_BASE}/tracks/stream?file=${encodeURIComponent(filePath)}`,
 
-  getAnalyzedTracks: async (limit: number = 500) => {
+  getAnalyzedTracks: async () => {
     try {
-      const response = await axios.get(`${ANALYTICS_API_URL}/api/v1/tracks`, {
-        params: { status: 'completed', limit }
+      // Analytics API has a max limit of 50, so we need to paginate
+      const allTracks: any[] = [];
+      let offset = 0;
+      const limit = 50;
+      let total = 0;
+      
+      // Fetch first page to get total count
+      const firstResponse = await axios.get(`${ANALYTICS_API_URL}/api/v1/tracks`, {
+        params: { status: 'completed', limit, offset }
       });
-      return response;
+      
+      if (firstResponse?.data) {
+        total = firstResponse.data.total;
+        allTracks.push(...firstResponse.data.tracks);
+        offset += limit;
+        
+        // Fetch remaining pages
+        while (offset < total) {
+          const response = await axios.get(`${ANALYTICS_API_URL}/api/v1/tracks`, {
+            params: { status: 'completed', limit, offset }
+          });
+          if (response?.data?.tracks) {
+            allTracks.push(...response.data.tracks);
+          }
+          offset += limit;
+        }
+      }
+      
+      return { data: { tracks: allTracks, total } };
     } catch (error) {
       console.error('Analytics API not available:', error);
       throw error;
