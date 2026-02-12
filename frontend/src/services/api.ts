@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Job, Stats, TrackListResult, TrackScanStatus, VersionInfo, AnalyzedTracksResult, AnalyticsStats } from '../types';
+import type { Job, Stats, TrackListResult, TrackScanStatus, VersionInfo, AnalyticsStats } from '../types';
 
 const API_BASE = '/api/v1';
 const ANALYTICS_API_URL = import.meta.env.VITE_ANALYTICS_API_URL || 'http://localhost:8080';
@@ -85,8 +85,17 @@ export const apiService = {
   getStreamUrl: (filePath: string) =>
     `${API_BASE}/tracks/stream?file=${encodeURIComponent(filePath)}`,
 
-  getAnalyzedTracks: (params?: { downloads_dir?: string }) =>
-    api.get<AnalyzedTracksResult>('/tracks/analyzed', { params }),
+  getAnalyzedTracks: async (limit: number = 500) => {
+    try {
+      const response = await axios.get(`${ANALYTICS_API_URL}/api/v1/tracks`, {
+        params: { status: 'completed', limit }
+      });
+      return response;
+    } catch (error) {
+      console.error('Analytics API not available:', error);
+      throw error;
+    }
+  },
 
   // Audio Analysis
   analyzeTrack: (filePath: string) =>

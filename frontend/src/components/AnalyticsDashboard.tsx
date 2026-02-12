@@ -10,14 +10,26 @@ export const AnalyticsDashboard = () => {
   const fetchAnalyzedTracks = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getAnalyzedTracks();
+      const response = await apiService.getAnalyzedTracks(500);
       if (response?.data) {
-        setTracks(response.data.tracks || []);
+        // Analytics service returns { tracks: [...], total, limit, offset }
+        const apiTracks = response.data.tracks || [];
+        console.log(`Loaded ${apiTracks.length} analyzed tracks from analytics service`);
+        
+        // Map the analytics API format to our frontend format
+        // Analytics API has 'features' field, we need 'analysis'
+        const mappedTracks = apiTracks.map((track: any) => ({
+          file_path: track.file_path,
+          file_name: track.file_name,
+          analysis: track.features, // Map 'features' to 'analysis'
+        }));
+        
+        setTracks(mappedTracks);
         setError(null);
       }
     } catch (err: any) {
       console.error('Failed to fetch analyzed tracks:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load analyzed tracks');
+      setError(err.response?.data?.error || err.message || 'Failed to load analyzed tracks from analytics service');
     } finally {
       setLoading(false);
     }
