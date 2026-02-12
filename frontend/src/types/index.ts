@@ -102,3 +102,14 @@ export interface AnalyzedTracksResult {
   tracks: AnalyzedTrack[];
   count: number;
 }
+
+export interface AnalyticsStats {
+  total: number;
+  pending: number;
+  analyzing: number;
+  completed: number;
+  failed: number;
+  avg_processing_time_sec?: string;
+  tracks_per_hour?: string;
+  completion_percentage?: string;
+}

@@ -6,12 +6,14 @@ A full-stack music scraper and management system for DoYou World Radio. Scrapes 
 **Tech Stack:**
 - **Backend**: Go 1.23+ with Fiber v2, structured logging (zerolog), WebSocket support
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS
+- **Analytics**: Separate microservice for audio analysis (BPM, key, energy, etc.)
 - **Scraping**: chromedp (headless Chrome)
 - **Downloading**: yt-dlp for audio extraction
 - **Deployment**: Docker + docker-compose, Raspberry Pi/CasaOS compatible
 
 ## Documentation
 - [Development Guide](docs/DEVELOPMENT.md) - Local setup, Docker workflows, debugging tips
+- [Analytics Integration](docs/ANALYTICS_INTEGRATION.md) - Connect to audio analysis service
 - [Project Roadmap](docs/TODO.md) - Upcoming features and improvements
 - [API Documentation](api/README.md) - REST API endpoints and usage
 - [Docker Guide](docs/DOCKER.md) - Docker deployment instructions

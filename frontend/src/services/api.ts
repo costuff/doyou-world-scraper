@@ -1,7 +1,8 @@
 import axios from 'axios';
-import type { Job, Stats, TrackListResult, TrackScanStatus, VersionInfo, AnalyzedTracksResult } from '../types';
+import type { Job, Stats, TrackListResult, TrackScanStatus, VersionInfo, AnalyzedTracksResult, AnalyticsStats } from '../types';
 
 const API_BASE = '/api/v1';
+const ANALYTICS_API_URL = import.meta.env.VITE_ANALYTICS_API_URL || 'http://localhost:8080';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -90,6 +91,27 @@ export const apiService = {
   
   analyzeAll: (generateSpectrograms: boolean = false) =>
     api.post<{ message: string; job: Job }>('/analyze/all', { generate_spectrograms: generateSpectrograms }),
+  
+  // Analytics Service Integration
+  getAnalyticsStats: async () => {
+    try {
+      const response = await axios.get<AnalyticsStats>(`${ANALYTICS_API_URL}/api/v1/stats`);
+      return response;
+    } catch (error) {
+      console.error('Analytics API not available:', error);
+      return { data: null };
+    }
+  },
+  
+  getAnalyticsDetailed: async () => {
+    try {
+      const response = await axios.get<AnalyticsStats>(`${ANALYTICS_API_URL}/api/v1/stats/detailed`);
+      return response;
+    } catch (error) {
+      console.error('Analytics API not available:', error);
+      return { data: null };
+    }
+  },
 };
 
 export default apiService;
