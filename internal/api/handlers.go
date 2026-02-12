@@ -755,8 +755,8 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 			nasDir = "/nas"
 		}
 
-		// Only scan if NAS directory exists
-		if fileExists(nasDir) {
+		// Only scan if NAS directory exists and is not empty
+		if nasDir != "" && fileExists(nasDir) {
 			_ = filepath.Walk(nasDir, func(path string, info os.FileInfo, err error) error {
 				if err == nil && !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".mp3") {
 					nasMP3s++

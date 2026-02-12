@@ -531,20 +531,25 @@ func GetTracks(downloadsDir string, page, perPage int, search, sortBy, sortOrder
 	if cachedTracks, ok, stale := getCachedTracks(downloadsDir); ok && !stale {
 		allTracks = cachedTracks
 	} else if async {
+		// Use cached tracks if available
 		if cachedTracks, ok, _ := getCachedTracks(downloadsDir); ok {
 			allTracks = cachedTracks
 		}
+		// Check if we need to start a new scan
 		status := getTrackScanStatus(downloadsDir)
 		if !status.InProgress {
+			// Start async scan only if not already in progress
 			go func() {
 				tracks, err := scanAllTracks(downloadsDir)
 				if err == nil {
 					setCachedTracks(downloadsDir, tracks)
 				}
 			}()
+			// Get updated status after starting scan
 			status = getTrackScanStatus(downloadsDir)
 		}
-		inProgress = true
+		// Return actual scan status, not always true
+		inProgress = status.InProgress
 		scanned = status.Scanned
 	} else {
 		tracks, err := scanAllTracks(downloadsDir)
