@@ -20,6 +20,7 @@ export default function TrackBrowser() {
   const [analyzing, setAnalyzing] = useState<Set<string>>(new Set());
   const [expandedTrack, setExpandedTrack] = useState<string | null>(null);
   const [analyzedTracks, setAnalyzedTracks] = useState<Record<string, boolean>>({});
+  const [analyzedFilter, setAnalyzedFilter] = useState<'all' | 'analyzed' | 'not_analyzed'>('all');
   const [nasPath, setNasPath] = useState<string>(() => {
     return localStorage.getItem('nasPath') || '/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks';
   });
@@ -278,9 +279,48 @@ export default function TrackBrowser() {
         </div>
       </form>
 
+      {/* Filter Bar */}
+      <div className="mb-4 flex gap-2 items-center">
+        <span className="text-sm text-slate-400">Filter:</span>
+        <button
+          onClick={() => setAnalyzedFilter('all')}
+          className={`px-3 py-1 rounded text-sm transition ${
+            analyzedFilter === 'all'
+              ? 'bg-blue-600 text-white'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          All Tracks
+        </button>
+        <button
+          onClick={() => setAnalyzedFilter('analyzed')}
+          className={`px-3 py-1 rounded text-sm transition ${
+            analyzedFilter === 'analyzed'
+              ? 'bg-green-600 text-white'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          ✓ Analyzed Only
+        </button>
+        <button
+          onClick={() => setAnalyzedFilter('not_analyzed')}
+          className={`px-3 py-1 rounded text-sm transition ${
+            analyzedFilter === 'not_analyzed'
+              ? 'bg-orange-600 text-white'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          Not Analyzed
+        </button>
+      </div>
+
       {/* Stats */}
       <div className="mb-4 text-slate-400 text-sm">
-        Showing {tracks.length} of {total} tracks
+        Showing {tracks.filter(t => {
+          if (analyzedFilter === 'analyzed') return analyzedTracks[t.filename];
+          if (analyzedFilter === 'not_analyzed') return !analyzedTracks[t.filename];
+          return true;
+        }).length} of {total} tracks
       </div>
 
       {/* Scan Status */}
@@ -331,7 +371,11 @@ export default function TrackBrowser() {
               </tr>
             </thead>
             <tbody>
-              {tracks.map((track, index) => (
+              {tracks.filter(track => {
+                if (analyzedFilter === 'analyzed') return analyzedTracks[track.filename];
+                if (analyzedFilter === 'not_analyzed') return !analyzedTracks[track.filename];
+                return true;
+              }).map((track, index) => (
                 <>
                   <tr
                     key={`${track.file_path}-${index}`}
