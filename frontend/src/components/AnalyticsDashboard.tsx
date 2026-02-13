@@ -6,6 +6,9 @@ export const AnalyticsDashboard = () => {
   const [tracks, setTracks] = useState<AnalyzedTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
+  const [currentTrack, setCurrentTrack] = useState<string | null>(null);
+  const [audioElement] = useState(new Audio());
 
   const fetchAnalyzedTracks = async () => {
     try {
@@ -37,7 +40,72 @@ export const AnalyticsDashboard = () => {
 
   useEffect(() => {
     fetchAnalyzedTracks();
+    
+    // Cleanup audio on unmount
+    return () => {
+      audioElement.pause();
+      audioElement.src = '';
+    };
   }, []);
+
+  const handleSelectAll = () => {
+    if (selectedTracks.size === tracks.length) {
+      setSelectedTracks(new Set());
+    } else {
+      setSelectedTracks(new Set(tracks.map(t => t.file_path)));
+    }
+  };
+
+  const handleSelectTrack = (filePath: string) => {
+    const newSelected = new Set(selectedTracks);
+    if (newSelected.has(filePath)) {
+      newSelected.delete(filePath);
+    } else {
+      newSelected.add(filePath);
+    }
+    setSelectedTracks(newSelected);
+  };
+
+  const handlePlayTrack = (track: AnalyzedTrack) => {
+    if (currentTrack === track.file_path) {
+      // Toggle play/pause
+      if (audioElement.paused) {
+        audioElement.play();
+      } else {
+        audioElement.pause();
+      }
+    } else {
+      // Play new track
+      const streamUrl = apiService.getStreamUrl(track.file_path);
+      audioElement.src = streamUrl;
+      audioElement.play();
+      setCurrentTrack(track.file_path);
+    }
+  };
+
+  const handleStopAudio = () => {
+    audioElement.pause();
+    audioElement.currentTime = 0;
+    setCurrentTrack(null);
+  };
+
+  const handleExportSelected = () => {
+    const selectedData = tracks.filter(t => selectedTracks.has(t.file_path));
+    const csv = [
+      'File Name,BPM,Key,Energy,Danceability,Valence,Acousticness',
+      ...selectedData.map(t => 
+        `${t.file_name},${t.analysis.bpm.toFixed(2)},${t.analysis.key},${t.analysis.energy.toFixed(3)},${t.analysis.danceability.toFixed(3)},${t.analysis.valence.toFixed(3)},${t.analysis.acousticness.toFixed(3)}`
+      )
+    ].join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `analyzed-tracks-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
     return (
@@ -135,11 +203,39 @@ export const AnalyticsDashboard = () => {
 
       {/* Track List */}
       <div className="bg-slate-800 rounded-lg p-6 shadow-lg border border-slate-700">
-        <h3 className="text-xl font-bold text-white mb-4">Analyzed Tracks</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold text-white">Analyzed Tracks</h3>
+          {selectedTracks.size > 0 && (
+            <div className="flex gap-2 items-center">
+              <span className="text-slate-400 text-sm">{selectedTracks.size} selected</span>
+              <button
+                onClick={handleExportSelected}
+                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
+              >
+                Export CSV
+              </button>
+              <button
+                onClick={() => setSelectedTracks(new Set())}
+                className="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white text-sm rounded transition-colors"
+              >
+                Clear Selection
+              </button>
+            </div>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-slate-700">
               <tr className="text-slate-400">
+                <th className="text-left py-2 px-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedTracks.size === tracks.length && tracks.length > 0}
+                    onChange={handleSelectAll}
+                    className="cursor-pointer"
+                  />
+                </th>
+                <th className="text-left py-2 px-2">Play</th>
                 <th className="text-left py-2 px-2">Track</th>
                 <th className="text-center py-2 px-2">BPM</th>
                 <th className="text-center py-2 px-2">Key</th>
@@ -150,7 +246,31 @@ export const AnalyticsDashboard = () => {
             </thead>
             <tbody className="text-slate-300">
               {tracks.slice(0, 50).map((track, idx) => (
-                <tr key={idx} className="border-b border-slate-700 hover:bg-slate-700/50">
+                <tr
+                  key={idx}
+                  className={`border-b border-slate-700 hover:bg-slate-700/50 ${
+                    selectedTracks.has(track.file_path) ? 'bg-slate-700/30' : ''
+                  }`}
+                >
+                  <td className="py-2 px-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedTracks.has(track.file_path)}
+                      onChange={() => handleSelectTrack(track.file_path)}
+                      className="cursor-pointer"
+                    />
+                  </td>
+                  <td className="py-2 px-2">
+                    <button
+                      onClick={() => handlePlayTrack(track)}
+                      className={`text-lg hover:scale-110 transition-transform ${
+                        currentTrack === track.file_path ? 'text-green-400' : 'text-slate-400 hover:text-white'
+                      }`}
+                      title="Play preview"
+                    >
+                      {currentTrack === track.file_path && !audioElement.paused ? '⏸' : '▶'}
+                    </button>
+                  </td>
                   <td className="py-2 px-2 truncate max-w-xs">{track.file_name}</td>
                   <td className="py-2 px-2 text-center">{track.analysis.bpm.toFixed(0)}</td>
                   <td className="py-2 px-2 text-center">{track.analysis.key}</td>
@@ -166,6 +286,26 @@ export const AnalyticsDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Audio Player Bar */}
+      {currentTrack && (
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 p-4 shadow-lg z-50">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4 flex-1">
+              <button
+                onClick={handleStopAudio}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                ⏹
+              </button>
+              <div className="text-slate-300 truncate">
+                <span className="text-sm text-slate-400">Now Playing: </span>
+                {tracks.find(t => t.file_path === currentTrack)?.file_name || 'Unknown'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
