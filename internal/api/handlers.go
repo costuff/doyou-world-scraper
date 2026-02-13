@@ -116,6 +116,12 @@ func (h *Handlers) resolveDownloadsDir(requestedDir string) (string, error) {
 			}
 		}
 	}
+	
+	// Translate Mac volume paths to Docker mount point
+	// If user provides /Volumes/... path but we're in Docker, use /nas instead
+	if strings.HasPrefix(downloadsDir, "/Volumes/") && fileExists("/nas") {
+		downloadsDir = "/nas"
+	}
 
 	// Verify directory exists
 	if _, err := os.Stat(downloadsDir); os.IsNotExist(err) {
@@ -619,6 +625,13 @@ func (h *Handlers) HandleClearNASDownloads(c *fiber.Ctx) error {
 	}
 
 	nasDir := req.NASDir
+	
+	// Translate Mac volume paths to Docker mount point
+	// If user provides /Volumes/... path but we're in Docker, use /nas instead
+	if strings.HasPrefix(nasDir, "/Volumes/") && fileExists("/nas") {
+		nasDir = "/nas"
+	}
+	
 	if nasDir == "" {
 		// Try to auto-detect NAS path
 		if fileExists("/nas") {
@@ -637,7 +650,7 @@ func (h *Handlers) HandleClearNASDownloads(c *fiber.Ctx) error {
 	if _, err := os.Stat(nasDir); os.IsNotExist(err) {
 		return c.Status(404).JSON(fiber.Map{
 			"error":   fmt.Sprintf("NAS directory does not exist: %s", nasDir),
-			"message": "Check NAS mount path or set NAS_PATH environment variable",
+			"message": "In Docker, NAS should be mounted at /nas. Check docker-compose.yml volumes configuration.",
 		})
 	}
 
