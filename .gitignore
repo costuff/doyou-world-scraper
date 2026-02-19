@@ -49,3 +49,9 @@ build/
 
 # Docker
 docker-compose.override.yml
+
+# Cloudflared tunnel credentials
+/tunnel-credentials.json
+
+# Local persisted runtime data
+/data/

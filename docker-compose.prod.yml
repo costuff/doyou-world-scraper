@@ -9,6 +9,8 @@ services:
       - ./csv:/app/csv
       - ./downloads:/app/downloads
       - ${NAS_PATH:-/mnt/music}:/nas
+      - ./test_tracks:/nas_test:ro
+      - ./data:/app/data
     environment:
       - PORT=3001
       - TZ=${TZ:-Europe/Athens}
@@ -44,6 +46,25 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: doyou-cloudflared
+    restart: unless-stopped
+    volumes:
+      - ./cloudflared-config.yml:/etc/cloudflared/config.yml:ro
+      - ./tunnel-credentials.json:/etc/cloudflared/credentials.json:ro
+    command: tunnel --config /etc/cloudflared/config.yml run
+    networks:
+      - doyou-network
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --cleanup --interval 300
 
 networks:
   doyou-network:
