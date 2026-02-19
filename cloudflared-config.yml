@@ -1,0 +1,10 @@
+tunnel: 36932360-c9a1-4ec7-92ba-7791eb4cfa09
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: do-you-world-scraper.costuff.work
+    path: /api/*
+    service: http://api:3001
+  - hostname: do-you-world-scraper.costuff.work
+    service: http://frontend:80
+  - service: http_status:404
