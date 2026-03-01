@@ -947,13 +947,13 @@ func (h *Handlers) HandleGetAnalyzedTracks(c *fiber.Ctx) error {
 
 // Serve audio file for playback
 func (h *Handlers) HandleStreamTrack(c *fiber.Ctx) error {
-	filepath := c.Query("file")
-	if filepath == "" {
+	requestedPath := c.Query("file")
+	if requestedPath == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "File path is required"})
 	}
 
-	// Security: Check if file exists and is within downloads directory
-	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+	resolvedPath, err := h.resolveStreamPath(requestedPath)
+	if err != nil {
 		return c.Status(404).JSON(fiber.Map{"error": "File not found"})
 	}
 
@@ -961,7 +961,56 @@ func (h *Handlers) HandleStreamTrack(c *fiber.Ctx) error {
 	c.Set("Content-Type", "audio/mpeg")
 	c.Set("Accept-Ranges", "bytes")
 
-	return c.SendFile(filepath)
+	return c.SendFile(resolvedPath)
+}
+
+func (h *Handlers) resolveStreamPath(requestedPath string) (string, error) {
+	normalized := filepath.Clean(requestedPath)
+	var candidates []string
+
+	// Direct path first (works for already-correct absolute paths like /nas/...)
+	candidates = append(candidates, normalized)
+
+	// Map analytics worker absolute paths to scraper mount
+	if strings.HasPrefix(normalized, "/mnt/music/downloads/") || normalized == "/mnt/music/downloads" {
+		rel := strings.TrimPrefix(normalized, "/mnt/music/downloads")
+		rel = strings.TrimPrefix(rel, "/")
+		if rel == "" {
+			candidates = append(candidates, "/nas")
+		} else {
+			candidates = append(candidates, filepath.Join("/nas", rel))
+		}
+	}
+
+	// Relative paths from analytics DB (e.g. complete/foo/bar.mp3)
+	if !filepath.IsAbs(normalized) {
+		candidates = append(candidates,
+			filepath.Join("/nas", normalized),
+			filepath.Join("/app/downloads", normalized),
+			filepath.Join(h.cfg.DownloadsDir, normalized),
+		)
+		if h.cfg.NASPath != "" {
+			candidates = append(candidates, filepath.Join(h.cfg.NASPath, normalized))
+		}
+	}
+
+	// Try candidates in order and return first existing file
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("stream file not found")
 }
 
 // Audio analysis handler
