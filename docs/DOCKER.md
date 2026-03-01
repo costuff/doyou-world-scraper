@@ -4,17 +4,19 @@
 
 ```bash
 # Build images locally
-docker-compose build
+docker compose build
 
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop services
-docker-compose down
+docker compose down
 ```
+
+This uses `docker-compose.yml` (local API + frontend stack).
 
 ## Production (Raspberry Pi)
 
@@ -35,10 +37,12 @@ docker run -d --name watchtower --restart unless-stopped \
   containrrr/watchtower
 
 # 4. Start app
-docker-compose up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 Now every push to GitHub will auto-deploy to your Pi! 🚀
+
+Before pushing, run [PREPUSH_CHECKLIST.md](PREPUSH_CHECKLIST.md).
 
 ## FREE Services Used:
 - ✅ GitHub Actions (2000 min/month free)

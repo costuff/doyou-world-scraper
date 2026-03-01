@@ -42,6 +42,8 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
   - resolveDownloadsDir() helper with Docker/local/NAS support
   - Auto-detect common mount points on macOS/Linux
   - 10 new tests in handlers_nas_resolve_test.go
+- [x] **Cleaned Docker Dev Stack (v1.5.7)** - Replaced obsolete `isponsorblocktv`-only `docker-compose.yml` with API + frontend local development stack ✅
+- [x] **Pre-Push Checklist Added (v1.5.7)** - Added `docs/PREPUSH_CHECKLIST.md` and linked from docs for consistent local verification before pipeline ✅
 - [ ] **Backend Test Coverage to 80%+ (PRIORITY 2)** - Currently at 62% average (249 test cases)
   - internal/api: 51.8% → 80%+ (add handler tests for error cases, edge cases, WebSocket scenarios)
   - internal/jobs: 53.7% → 80%+ (add job cleanup, cancellation, failure scenario tests)

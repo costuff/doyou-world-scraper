@@ -13,6 +13,7 @@ A full-stack music scraper and management system for DoYou World Radio. Scrapes 
 
 ## Documentation
 - [Development Guide](docs/DEVELOPMENT.md) - Local setup, Docker workflows, debugging tips
+- [Pre-Push Checklist](docs/PREPUSH_CHECKLIST.md) - Required checks before pipeline/deploy
 - [Analytics Integration](docs/ANALYTICS_INTEGRATION.md) - Connect to audio analysis service
 - [Project Roadmap](docs/TODO.md) - Upcoming features and improvements
 - [API Documentation](api/README.md) - REST API endpoints and usage
@@ -69,15 +70,17 @@ cd frontend && npm install && npm run dev
 ### Docker Deployment
 
 ```bash
-# Build and run all services
-docker-compose up -d
+# Local Docker stack (build API + frontend)
+docker compose up -d --build
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop services
-docker-compose down
+docker compose down
 ```
+
+For production images from GHCR + Watchtower, use `docker-compose.prod.yml`.
 
 **Services:**
 - API: http://localhost:3000 (Docker dev) or http://localhost:3002 (local)

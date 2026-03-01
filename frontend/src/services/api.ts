@@ -92,33 +92,41 @@ export const apiService = {
       let offset = 0;
       const limit = 50;
       let total = 0;
-      
+
+      // Helper to add timeout to axios
+      const axiosWithTimeout = (url: string, params: any, timeoutMs = 10000) =>
+        axios.get(url, { params, timeout: timeoutMs });
+
       // Fetch first page to get total count
-      const firstResponse = await axios.get(`${ANALYTICS_API_URL}/api/v1/tracks`, {
-        params: { status: 'completed', limit, offset }
-      });
-      
+      const firstResponse = await axiosWithTimeout(`${ANALYTICS_API_URL}/api/v1/tracks`, { status: 'completed', limit, offset });
+
       if (firstResponse?.data) {
         total = firstResponse.data.total;
         allTracks.push(...firstResponse.data.tracks);
         offset += limit;
-        
+
         // Fetch remaining pages
         while (offset < total) {
-          const response = await axios.get(`${ANALYTICS_API_URL}/api/v1/tracks`, {
-            params: { status: 'completed', limit, offset }
-          });
+          const response = await axiosWithTimeout(`${ANALYTICS_API_URL}/api/v1/tracks`, { status: 'completed', limit, offset });
           if (response?.data?.tracks) {
             allTracks.push(...response.data.tracks);
           }
           offset += limit;
         }
       }
-      
+
       return { data: { tracks: allTracks, total } };
-    } catch (error) {
-      console.error('Analytics API not available:', error);
-      throw error;
+    } catch (error: any) {
+      let msg = 'Analytics API not available.';
+      if (error.code === 'ECONNABORTED') {
+        msg = 'Analytics API request timed out.';
+      } else if (error.response?.data?.error) {
+        msg = error.response.data.error;
+      } else if (error.message) {
+        msg = error.message;
+      }
+      console.error('Analytics API error:', msg);
+      throw new Error(msg);
     }
   },
 
