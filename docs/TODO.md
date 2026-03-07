@@ -9,6 +9,13 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 
 ## TODOs
 
+### Remaining Steps (Immediate)
+- [ ] Raise backend coverage from ~62% to 80%+ (focus: `internal/api`, `internal/jobs`, `internal/storage`, `internal/scraper`)
+- [ ] Create frontend test baseline with Vitest + RTL (currently 0% coverage)
+- [ ] Fix `golangci-lint` config for current version and re-enable strict lint checks in CI
+- [ ] Resolve `errcheck` violations in active code paths
+- [ ] Keep dual-repo startup docs/tasks aligned with actual local workflow and ports
+
 ### Status Refresh (2026-03-07)
 - [x] Analytics service split is completed and running in separate repo (`doyou-music-analytics`)
 - [x] Scraper dashboard is integrated with analytics stats endpoint
