@@ -2,6 +2,17 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Stop Local Dev Servers",
+      "type": "shell",
+      "command": "lsof -ti:3002 | xargs kill -9 2>/dev/null || true; lsof -ti:5173 | xargs kill -9 2>/dev/null || true; lsof -ti:8080 | xargs kill -9 2>/dev/null || true; pkill -f 'go run ./cmd/worker' 2>/dev/null || true",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "group": "servers"
+      }
+    },
+    {
       "label": "Start API Server",
       "type": "shell",
       "command": "PORT=3002 go run ./cmd/api",
@@ -18,8 +29,8 @@
         }
       },
       "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
+        "reveal": "silent",
+        "panel": "shared",
         "group": "servers"
       }
     },
@@ -40,10 +51,120 @@
         }
       },
       "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
+        "reveal": "silent",
+        "panel": "shared",
         "group": "servers"
       }
+    },
+    {
+      "label": "Check Docker Daemon",
+      "type": "shell",
+      "command": "docker context use desktop-linux >/dev/null 2>&1 || true; docker info >/dev/null 2>&1 || (echo 'Docker daemon not ready.' && exit 1)",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "group": "servers"
+      }
+    },
+    {
+      "label": "Start Analytics Postgres",
+      "type": "shell",
+      "command": "docker context use desktop-linux >/dev/null 2>&1 || true; docker info >/dev/null 2>&1 || (echo 'Docker not ready. Attempting to start Docker Desktop...'; open -a Docker >/dev/null 2>&1 || true; for i in {1..90}; do docker info >/dev/null 2>&1 && break; sleep 2; done); docker info >/dev/null 2>&1 || (echo 'Docker daemon unavailable. Start Docker Desktop and retry.' && exit 1); cd ${workspaceFolder}/../doyou-music-analytics && docker compose up -d postgres && for i in {1..60}; do docker compose exec -T postgres pg_isready -U doyou >/dev/null 2>&1 && break; sleep 2; done; docker compose exec -T postgres pg_isready -U doyou >/dev/null 2>&1 || (echo 'Postgres failed to become ready in time.' && docker compose ps && exit 1)",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "group": "servers"
+      }
+    },
+    {
+      "label": "Start Analytics API",
+      "type": "shell",
+      "command": "NAS_PRIMARY='/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks'; NAS_FALLBACK='/Volumes/ExtHDD-8TB/GoPRO/Before/EIN Podcast 00 08:05:2023'; if [ -d \"$NAS_PRIMARY\" ] && find \"$NAS_PRIMARY\" -type f -iname '*.mp3' ! -name '._*' | head -n 1 | grep -q .; then SELECTED_NAS_PATH=\"$NAS_PRIMARY\"; elif [ -d \"$NAS_FALLBACK\" ] && find \"$NAS_FALLBACK\" -type f -iname '*.mp3' ! -name '._*' | head -n 1 | grep -q .; then SELECTED_NAS_PATH=\"$NAS_FALLBACK\"; else SELECTED_NAS_PATH=\"${workspaceFolder}/data/downloads\"; mkdir -p \"$SELECTED_NAS_PATH\"; fi; cd ${workspaceFolder}/../doyou-music-analytics && DATABASE_URL=postgresql://doyou:dev_password_change_me@localhost:5432/doyou_music NAS_MOUNT_PATH=\"$SELECTED_NAS_PATH\" PORT=8080 API_PORT=8080 CORS_ORIGINS=http://localhost:5173 VALIDATE_NAS_ON_STARTUP=false go run ./cmd/api",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^(.*)$",
+          "file": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Starting DoYou Music Analytics API.*$",
+          "endsPattern": "^.*API server listening on port.*$"
+        }
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "group": "servers"
+      }
+    },
+    {
+      "label": "Start Analytics Worker (Fast)",
+      "type": "shell",
+      "command": "NAS_PRIMARY='/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks'; NAS_FALLBACK='/Volumes/ExtHDD-8TB/GoPRO/Before/EIN Podcast 00 08:05:2023'; if [ -d \"$NAS_PRIMARY\" ] && find \"$NAS_PRIMARY\" -type f -iname '*.mp3' ! -name '._*' | head -n 1 | grep -q .; then SELECTED_NAS_PATH=\"$NAS_PRIMARY\"; elif [ -d \"$NAS_FALLBACK\" ] && find \"$NAS_FALLBACK\" -type f -iname '*.mp3' ! -name '._*' | head -n 1 | grep -q .; then SELECTED_NAS_PATH=\"$NAS_FALLBACK\"; else SELECTED_NAS_PATH=\"${workspaceFolder}/data/downloads\"; mkdir -p \"$SELECTED_NAS_PATH\"; fi; cd ${workspaceFolder}/../doyou-music-analytics && DATABASE_URL=postgresql://doyou:dev_password_change_me@localhost:5432/doyou_music NAS_MOUNT_PATH=\"$SELECTED_NAS_PATH\" PYTHON_PATH=${workspaceFolder}/../doyou-music-analytics/.venv/bin/python VALIDATE_NAS_ON_STARTUP=true MAX_WORKERS=2 ANALYSIS_TIMEOUT=90s SCAN_INTERVAL=6h ENABLE_CLEANUP=false LOG_LEVEL=warn go run ./cmd/worker",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^(.*)$",
+          "file": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Starting DoYou Music Analytics Worker.*$",
+          "endsPattern": "^.*Worker will run continuously.*$"
+        }
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "group": "servers"
+      }
+    },
+    {
+      "label": "Start Full Stack (Fast Analytics)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Start Analytics Postgres",
+        "Start Analytics API",
+        "Start Analytics Worker (Fast)",
+        "Start API Server",
+        "Start Frontend Server"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Restart Full Stack (Fast Analytics)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Stop Local Dev Servers",
+        "Start Full Stack (Fast Analytics)"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Scraper Only (No Docker)",
+      "dependsOn": [
+        "Start API Server",
+        "Start Frontend Server"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Restart Scraper Only (No Docker)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Stop Local Dev Servers",
+        "Start Scraper Only (No Docker)"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Stop Analytics Postgres",
+      "type": "shell",
+      "command": "cd ${workspaceFolder}/../doyou-music-analytics && docker compose stop postgres",
+      "problemMatcher": []
     },
     {
       "label": "Start All Servers",

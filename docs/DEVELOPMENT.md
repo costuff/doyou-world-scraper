@@ -2,6 +2,52 @@
 
 This guide explains the best practices for developing new features without rebuilding Docker constantly.
 
+For running scraper and analytics together locally, see [DUAL_REPO_DEVELOPMENT.md](DUAL_REPO_DEVELOPMENT.md).
+
+## Recommended VS Code Task Flow (Current)
+
+Use the scraper workspace tasks from `.vscode/tasks.json`:
+
+- `Start Full Stack (Fast Analytics)` - starts analytics postgres/api/worker + scraper api + frontend
+- `Restart Full Stack (Fast Analytics)` - clean restart (kills old local processes first)
+- `Start Scraper Only (No Docker)` - scraper API + frontend only
+- `Restart Scraper Only (No Docker)` - clean scraper-only restart
+
+**Important:** prefer `Restart ...` when things look inconsistent (port collisions, stale logs, proxy errors).
+
+## 30-Second Health Checks
+
+After startup, run:
+
+```bash
+curl http://localhost:3002/api/v1/health
+curl http://localhost:8080/health
+curl http://localhost:8080/api/v1/stats
+```
+
+Expected:
+- Scraper health returns `status: ok`
+- Analytics health returns `status: healthy`
+- Stats returns counts (may be `pending: 0` when worker is idle)
+
+## Common Failure Patterns (and Fixes)
+
+- **Frontend `ECONNREFUSED` for `/api/v1/*`**
+  - Scraper API is down on `3002`
+  - Run `Restart Scraper Only (No Docker)`
+
+- **Analytics worker running but no analysis happening**
+  - `pending=0` in `/api/v1/stats`
+  - Import tracks first, then worker will pick them up
+
+- **Imported tracks fail with python module errors**
+  - Ensure analytics venv dependencies are installed (`librosa`, `soundfile`, `numpy`)
+  - Worker task is configured to use analytics `.venv` Python
+
+- **NAS path exists but has no MP3 files**
+  - Analytics will be healthy but idle
+  - Confirm the actual mounted folder containing `.mp3` files before import
+
 ## Quick Start: Local Development (Recommended)
 
 For fast iteration on backend changes, run the API server **locally** instead of in Docker:

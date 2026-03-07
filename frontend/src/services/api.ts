@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { Job, Stats, TrackListResult, TrackScanStatus, VersionInfo, AnalyticsStats } from '../types';
 
 const API_BASE = '/api/v1';
-const ANALYTICS_API_URL = import.meta.env.VITE_ANALYTICS_API_URL || 'http://localhost:8080';
+const ANALYTICS_API_URL = import.meta.env.VITE_ANALYTICS_API_URL || '/analytics-api';
 
 const api = axios.create({
   baseURL: API_BASE,

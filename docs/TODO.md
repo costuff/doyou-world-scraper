@@ -9,6 +9,13 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 
 ## TODOs
 
+### Status Refresh (2026-03-07)
+- [x] Analytics service split is completed and running in separate repo (`doyou-music-analytics`)
+- [x] Scraper dashboard is integrated with analytics stats endpoint
+- [ ] Raise backend + frontend test coverage toward 80% target
+- [ ] Finalize linting/errcheck cleanup and enforce in CI
+- [ ] Keep dual-repo local development workflow documented and current
+
 ### Backend
 - [x] Scrape tracklists and download CSVs from doyoutrackid.com (Go)
 - [x] Download tracks from SoundCloud/YouTube/Spotify/Apple Music (Go)
@@ -51,7 +58,7 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
   - internal/scraper: 60.3% → 80%+ (add scraper tests for malformed HTML, network failures, date edge cases)
 - [ ] **Fix golangci-lint configuration** - .golangci.yml has invalid 'skip-dirs' property for v1.64, need to update config or find alternative to exclude legacy scripts
 - [ ] **Fix all errcheck linting violations** - Add proper error checking throughout codebase (currently disabled in CI)
-- [ ] Document development workflow for faster iteration without Docker rebuilds
+- [x] Document development workflow for faster iteration without Docker rebuilds
 
 ### Frontend
 - [x] Build a web dashboard (React + TypeScript + Vite + Tailwind CSS)
@@ -117,15 +124,15 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
   - Real-time stats display in StatsPanel component
   - Processing rate, completion %, status breakdown
   - Auto-refresh every 5 seconds
-**Option C: Shared PostgreSQL Database (Recommended)**
-- [ ] **Create doyou-music-analytics repository** - Separate repo for audio analysis
-- [ ] **Phase 1: Shared PostgreSQL** - Both services connect to same DB
+**Option C: Shared PostgreSQL Database (Recommended, Active)**
+- [x] **Create doyou-music-analytics repository** - Separate repo for audio analysis
+- [x] **Phase 1: Shared PostgreSQL** - Both services connect to same DB
   - Scraper writes: track metadata (file_path, file_name, download_date, title, artist)
   - Analytics reads: tracks WHERE analyzed_at IS NULL
   - Analytics writes: audio features (bpm, key, energy, danceability, etc.)
   - Schema: `tracks` table with columns for basic info + audio features
-  - Analytics accesses audio files via NAS mount or S3-compatible storage
-- [ ] **Phase 2: Event-Driven with Redis** (Future Enhancement)
+  - Analytics accesses audio files via NAS mount
+- [ ] **Phase 2: Event-Driven with Redis** (Future enhancement)
   - Scraper publishes: `track_downloaded` event to Redis pub/sub
   - Analytics subscribes: processes new tracks automatically
   - Async job queue with retries for failed analyses
@@ -158,30 +165,24 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 3. **🧹 Code Quality (PRIORITY 2)** - Fix linting and error handling
    - Fix golangci-lint configuration (invalid skip-dirs for v1.64)
    - Fix all errcheck violations (proper error handling throughout)
-   - Document development workflow
+  - Keep development workflow docs aligned with actual ports/commands
 4. **📊 Basic Visualization (PRIORITY 3)** - Simple charts for analyzed tracks
    - Bar charts for analyzed tracks count by date
    - Table view with sortable columns (BPM, Energy, Key)
    - Keep lightweight for Raspberry Pi
 
-### New Repo (doyou-music-analytics) - Powerful Machine
-1. **🏗️ Project Setup (PRIORITY 1)** - Create new repository
-   - Initialize Go project with similar structure
-   - Add PostgreSQL to docker-compose.yml
-   - Design database schema for tracks + audio features
-2. **🔗 Integration Architecture (PRIORITY 2)** - Choose communication pattern
-   - Decide: Shared NAS, REST API, or PostgreSQL (recommended)
-   - Implement file access (NAS mount or HTTP download)
-   - Test cross-service communication
-3. **⚡ Batch Analysis Worker (PRIORITY 3)** - Process all 9,875 tracks
-   - Background job with progress tracking
-   - Configurable parallelism (4-8 workers)
-   - Store results in PostgreSQL
-4. **📈 Advanced Visualizations (PRIORITY 4)** - Interactive dashboard
-   - Scatter plots, histograms, radar charts, heatmaps
-   - Music recommendation system
-   - Playlist generation by mood/energy
-5. **🔄 Event-Driven Architecture (PRIORITY 5)** - Redis pub/sub for real-time updates
+### Analytics Repo (doyou-music-analytics) - Current Priorities
+1. **🧪 Coverage expansion (PRIORITY 1)**
+  - Focus packages: `internal/analyzer`, `internal/api`, `internal/db`
+  - Add more failure-mode and integration tests
+2. **📤 Export endpoints (PRIORITY 2)**
+  - CSV/JSON export for analyzed tracks with filters
+3. **🔁 Bulk re-analysis controls (PRIORITY 3)**
+  - Re-run failed/outdated analyses with safe trigger semantics
+4. **📈 Better observability (PRIORITY 4)**
+  - Improve worker progress/error metrics and operator runbook
+5. **🔄 Event-driven enhancements (PRIORITY 5, future)**
+  - Redis pub/sub after current API + worker priorities are complete
 
 ## Code Quality & Architecture Improvements
 

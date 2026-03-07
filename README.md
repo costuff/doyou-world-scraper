@@ -13,6 +13,7 @@ A full-stack music scraper and management system for DoYou World Radio. Scrapes 
 
 ## Documentation
 - [Development Guide](docs/DEVELOPMENT.md) - Local setup, Docker workflows, debugging tips
+- [Dual-Repo Workflow](docs/DUAL_REPO_DEVELOPMENT.md) - Run scraper + analytics together locally
 - [Pre-Push Checklist](docs/PREPUSH_CHECKLIST.md) - Required checks before pipeline/deploy
 - [Analytics Integration](docs/ANALYTICS_INTEGRATION.md) - Connect to audio analysis service
 - [Project Roadmap](docs/TODO.md) - Upcoming features and improvements

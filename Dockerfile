@@ -59,7 +59,7 @@ ENV CHROME_BIN=/usr/bin/chromium \
     PYTHONUNBUFFERED=1
 
 # Expose API port
-EXPOSE 3000
+EXPOSE 3001
 
 # Run the API server
 CMD ["./api"]
