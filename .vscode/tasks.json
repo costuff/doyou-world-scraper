@@ -81,7 +81,7 @@
     {
       "label": "Start Analytics API",
       "type": "shell",
-      "command": "NAS_PRIMARY='/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks'; NAS_FALLBACK='/Volumes/ExtHDD-8TB/GoPRO/Before/EIN Podcast 00 08:05:2023'; if [ -d \"$NAS_PRIMARY\" ] && find \"$NAS_PRIMARY\" -type f -iname '*.mp3' ! -name '._*' | head -n 1 | grep -q .; then SELECTED_NAS_PATH=\"$NAS_PRIMARY\"; elif [ -d \"$NAS_FALLBACK\" ] && find \"$NAS_FALLBACK\" -type f -iname '*.mp3' ! -name '._*' | head -n 1 | grep -q .; then SELECTED_NAS_PATH=\"$NAS_FALLBACK\"; else SELECTED_NAS_PATH=\"${workspaceFolder}/data/downloads\"; mkdir -p \"$SELECTED_NAS_PATH\"; fi; cd ${workspaceFolder}/../doyou-music-analytics && DATABASE_URL=postgresql://doyou:dev_password_change_me@localhost:5432/doyou_music NAS_MOUNT_PATH=\"$SELECTED_NAS_PATH\" PORT=8080 API_PORT=8080 CORS_ORIGINS=http://localhost:5173 VALIDATE_NAS_ON_STARTUP=false go run ./cmd/api",
+      "command": "cd ${workspaceFolder}/../doyou-music-analytics && DATABASE_URL=postgresql://doyou:dev_password_change_me@localhost:5432/doyou_music NAS_MOUNT_PATH='/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks' PORT=8080 API_PORT=8080 CORS_ORIGINS=http://localhost:5173 VALIDATE_NAS_ON_STARTUP=false SHALLOW_SCAN=true go run ./cmd/api",
       "isBackground": true,
       "problemMatcher": {
         "pattern": {
@@ -103,7 +103,7 @@
     {
       "label": "Start Analytics Worker (Fast)",
       "type": "shell",
-      "command": "NAS_PRIMARY='/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks'; NAS_FALLBACK='/Volumes/ExtHDD-8TB/GoPRO/Before/EIN Podcast 00 08:05:2023'; if [ -d \"$NAS_PRIMARY\" ] && find \"$NAS_PRIMARY\" -type f -iname '*.mp3' ! -name '._*' | head -n 1 | grep -q .; then SELECTED_NAS_PATH=\"$NAS_PRIMARY\"; elif [ -d \"$NAS_FALLBACK\" ] && find \"$NAS_FALLBACK\" -type f -iname '*.mp3' ! -name '._*' | head -n 1 | grep -q .; then SELECTED_NAS_PATH=\"$NAS_FALLBACK\"; else SELECTED_NAS_PATH=\"${workspaceFolder}/data/downloads\"; mkdir -p \"$SELECTED_NAS_PATH\"; fi; cd ${workspaceFolder}/../doyou-music-analytics && DATABASE_URL=postgresql://doyou:dev_password_change_me@localhost:5432/doyou_music NAS_MOUNT_PATH=\"$SELECTED_NAS_PATH\" PYTHON_PATH=${workspaceFolder}/../doyou-music-analytics/.venv/bin/python VALIDATE_NAS_ON_STARTUP=true MAX_WORKERS=2 ANALYSIS_TIMEOUT=90s SCAN_INTERVAL=6h ENABLE_CLEANUP=false LOG_LEVEL=warn go run ./cmd/worker",
+      "command": "cd ${workspaceFolder}/../doyou-music-analytics && DATABASE_URL=postgresql://doyou:dev_password_change_me@localhost:5432/doyou_music NAS_MOUNT_PATH='/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks' PYTHON_PATH=${workspaceFolder}/../doyou-music-analytics/.venv/bin/python VALIDATE_NAS_ON_STARTUP=false SHALLOW_SCAN=true MAX_WORKERS=2 ANALYSIS_TIMEOUT=90s SCAN_INTERVAL=6h ENABLE_CLEANUP=false LOG_LEVEL=info go run ./cmd/worker",
       "isBackground": true,
       "problemMatcher": {
         "pattern": {
