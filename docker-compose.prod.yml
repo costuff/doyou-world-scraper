@@ -64,6 +64,9 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.docker/config.json:/config.json:ro  # For authenticated GHCR pulls
+    networks:
+      - doyou-network
     command: --cleanup --interval 300
 
 networks:

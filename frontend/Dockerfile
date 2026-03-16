@@ -10,7 +10,10 @@ RUN npm ci
 # Copy source
 COPY . .
 
-# Build the app
+# Build the app — VITE_ANALYTICS_API_URL baked in at build time (proxied by nginx in prod, by vite in dev)
+# CI uses the ARG default; override with --build-arg if needed
+ARG VITE_ANALYTICS_API_URL=/analytics-api
+ENV VITE_ANALYTICS_API_URL=$VITE_ANALYTICS_API_URL
 RUN npm run build
 
 # Production stage
