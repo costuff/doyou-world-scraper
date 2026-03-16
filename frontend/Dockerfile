@@ -29,9 +29,10 @@ server {
 
     resolver 127.0.0.11 ipv6=off;
 
-    # API proxy
+    # API proxy — use full container name to avoid DNS ambiguity when
+    # frontend is on multiple Docker networks (scraper + analytics)
     location /api/ {
-        proxy_pass http://api:3001;
+        proxy_pass http://doyou-api:3001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -41,15 +42,11 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 
-    # Analytics API proxy (separate analytics service)
+    # Analytics API proxy (separate analytics service, direct proxy_pass to avoid variable path issues)
     location /analytics-api/ {
-        set \$analytics_upstream doyou-analytics-api:8080;
-        proxy_pass http://\$analytics_upstream/;
+        proxy_pass http://doyou-analytics-api:8080/;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_connect_timeout 2s;
