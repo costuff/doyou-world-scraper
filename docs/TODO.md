@@ -16,12 +16,16 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] Resolve `errcheck` violations in active code paths
 - [ ] Keep dual-repo startup docs/tasks aligned with actual local workflow and ports
 
-### Status Refresh (2026-03-07)
+### Status Refresh (2026-03-16)
 - [x] Analytics service split is completed and running in separate repo (`doyou-music-analytics`)
 - [x] Scraper dashboard is integrated with analytics stats endpoint
+- [x] Both stacks running on Mac Mini (scraper no longer on Raspberry Pi)
+- [x] Watchtower auth fixed, all containers auto-updating from GHCR
+- [x] Analytics proxy working for remote users via `/analytics-api/` nginx block
 - [ ] Raise backend + frontend test coverage toward 80% target
 - [ ] Finalize linting/errcheck cleanup and enforce in CI
 - [ ] Keep dual-repo local development workflow documented and current
+- [ ] **Consolidate deployment** — create root-level `~/srv/docker-compose.prod.yml` using Compose `include:` to wire both stacks together (single `docker compose up`, shared network, single watchtower instance)
 
 ### Backend
 - [x] Scrape tracklists and download CSVs from doyoutrackid.com (Go)
@@ -84,7 +88,8 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
   - Graceful degradation if analytics service unavailable
   - See docs/ANALYTICS_INTEGRATION.md for setup
 - [ ] **Frontend Test Suite (PRIORITY 3)** - Install Vitest + React Testing Library + jsdom, add comprehensive tests for all components, hooks, and services (currently 0% coverage)
-- [ ] Music library analysis and visualization dashboard (PRIORITY 4 - graph-based browsing)
+- [ ] **Music exploration graph (PRIORITY 4)** - Energy vs Danceability scatter plot, BPM histogram, key/mode distribution, interactive filtering by audio features; data sourced from analytics API `/api/v1/tracks`
+- [ ] **UI overhaul** - Dark theme polish, animated chart transitions, improved visual hierarchy, better mobile layout
 
 ### Music Metadata & Analysis (Basic)
 - [x] **FIX AUDIO ANALYSIS JSON PARSING** - Fixed librosa warnings and Python path detection
@@ -179,16 +184,21 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
    - Keep lightweight for Raspberry Pi
 
 ### Analytics Repo (doyou-music-analytics) - Current Priorities
-1. **🧪 Coverage expansion (PRIORITY 1)**
+1. **🔧 Fix feature extraction algorithm (PRIORITY 1)**
+  - Audit and retune `scripts/analyze_audio.py` high-level formulas (energy, danceability, valence, etc.)
+  - These are hand-crafted approximations from librosa low-level output — quality needs validation
+2. **🧪 Coverage expansion (PRIORITY 2)**
   - Focus packages: `internal/analyzer`, `internal/api`, `internal/db`
   - Add more failure-mode and integration tests
-2. **📤 Export endpoints (PRIORITY 2)**
+3. **📊 Visualization dashboard (PRIORITY 3)**
+  - Scatter plots, BPM histograms, key distribution, timeline, feature-based filtering
+4. **📤 Export endpoints (PRIORITY 4)**
   - CSV/JSON export for analyzed tracks with filters
-3. **🔁 Bulk re-analysis controls (PRIORITY 3)**
+5. **🔁 Bulk re-analysis controls (PRIORITY 5)**
   - Re-run failed/outdated analyses with safe trigger semantics
-4. **📈 Better observability (PRIORITY 4)**
+6. **📈 Better observability (PRIORITY 6)**
   - Improve worker progress/error metrics and operator runbook
-5. **🔄 Event-driven enhancements (PRIORITY 5, future)**
+7. **🔄 Event-driven enhancements (PRIORITY 7, future)**
   - Redis pub/sub after current API + worker priorities are complete
 
 ## Code Quality & Architecture Improvements
