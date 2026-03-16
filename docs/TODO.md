@@ -14,6 +14,7 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] Create frontend test baseline with Vitest + RTL (currently 0% coverage)
 - [ ] Fix `golangci-lint` config for current version and re-enable strict lint checks in CI
 - [ ] Resolve `errcheck` violations in active code paths
+- [ ] Add download failure statistics + log visibility (track and expose which songs failed to download per job/run)
 - [ ] Keep dual-repo startup docs/tasks aligned with actual local workflow and ports
 
 ### Status Refresh (2026-03-16)
@@ -178,7 +179,11 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
    - Fix golangci-lint configuration (invalid skip-dirs for v1.64)
    - Fix all errcheck violations (proper error handling throughout)
   - Keep development workflow docs aligned with actual ports/commands
-4. **📊 Basic Visualization (PRIORITY 3)** - Simple charts for analyzed tracks
+4. **📉 Download failure observability (PRIORITY 3)**
+  - Add per-run failed download summary (count + song identifiers)
+  - Persist failed downloads to a log/artifact for later inspection
+  - Expose failed-download list in API and/or UI job details
+5. **📊 Basic Visualization (PRIORITY 4)** - Simple charts for analyzed tracks
    - Bar charts for analyzed tracks count by date
    - Table view with sortable columns (BPM, Energy, Key)
    - Keep lightweight for Raspberry Pi
