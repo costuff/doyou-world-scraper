@@ -62,6 +62,8 @@ services:
     image: containrrr/watchtower:latest
     container_name: watchtower
     restart: unless-stopped
+    environment:
+      DOCKER_API_VERSION: "1.44"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ~/.docker/config.json:/config.json:ro  # For authenticated GHCR pulls
@@ -72,4 +74,4 @@ services:
 networks:
   doyou-network:
     name: doyou-network
-    driver: bridge
+    external: true  # Created by do-you-music-analytics stack
