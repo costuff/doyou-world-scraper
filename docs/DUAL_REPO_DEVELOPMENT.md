@@ -4,34 +4,42 @@ This workflow lets you run and develop both services together on one machine:
 - `doyou-world-scraper` (API + frontend)
 - `doyou-music-analytics` (API + worker + PostgreSQL)
 
-## Port Map (Local)
+## Topology
+
+### Local (development machine)
 
 - Scraper API: `http://localhost:3002`
 - Scraper Frontend: `http://localhost:5173`
 - Analytics API: `http://localhost:8080`
 - Analytics PostgreSQL: `localhost:5432`
+- Frontend proxies analytics automatically: `/analytics-api/*` → `http://localhost:8080/*` (Vite proxy, no config needed)
+
+### Production (Mac Mini — `do-you-world-scraper.costuff.work`)
+
+- Scraper API + Frontend: `https://do-you-world-scraper.costuff.work` (Cloudflare Tunnel)
+- Analytics proxied at: `https://do-you-world-scraper.costuff.work/analytics-api/`
+- nginx in frontend container proxies `/analytics-api/` → `doyou-analytics-api:8080`
+- Frontend container is on both Docker networks (scraper + analytics)
+- Single Watchtower in scraper stack auto-updates all containers on the machine
 
 ## One-Time Setup
 
 ### 1) Scraper repo
 
 ```bash
-cd /Users/skoutelis/Desktop/workspace/doyou-world-scraper
+cd /path/to/doyou-world-scraper
 npm install
 cd frontend && npm install
 ```
 
-Create/update frontend env:
-
-```bash
-# /Users/skoutelis/Desktop/workspace/doyou-world-scraper/frontend/.env.local
-VITE_ANALYTICS_API_URL=http://localhost:8080
-```
+> **No `frontend/.env.local` needed.** `vite.config.ts` already proxies
+> `/analytics-api/*` → `http://localhost:8080/*` for local dev.
+> The production Dockerfile bakes `VITE_ANALYTICS_API_URL=/analytics-api` at build time.
 
 ### 2) Analytics repo
 
 ```bash
-cd /Users/skoutelis/Desktop/workspace/doyou-music-analytics
+cd /path/to/doyou-music-analytics
 cp .env.example .env
 ```
 
@@ -49,35 +57,35 @@ NAS_MOUNT_PATH=/Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks
 ### Terminal 1: Analytics Postgres
 
 ```bash
-cd /Users/skoutelis/Desktop/workspace/doyou-music-analytics
+cd /path/to/doyou-music-analytics
 docker compose up -d postgres
 ```
 
 ### Terminal 2: Analytics worker
 
 ```bash
-cd /Users/skoutelis/Desktop/workspace/doyou-music-analytics
+cd /path/to/doyou-music-analytics
 go run ./cmd/worker
 ```
 
 ### Terminal 3: Analytics API
 
 ```bash
-cd /Users/skoutelis/Desktop/workspace/doyou-music-analytics
+cd /path/to/doyou-music-analytics
 PORT=8080 go run ./cmd/api
 ```
 
 ### Terminal 4: Scraper API
 
 ```bash
-cd /Users/skoutelis/Desktop/workspace/doyou-world-scraper
+cd /path/to/doyou-world-scraper
 PORT=3002 go run ./cmd/api
 ```
 
 ### Terminal 5: Scraper frontend
 
 ```bash
-cd /Users/skoutelis/Desktop/workspace/doyou-world-scraper/frontend
+cd /path/to/doyou-world-scraper/frontend
 npm run dev
 ```
 
@@ -87,11 +95,11 @@ npm run dev
 # Scraper API health
 curl http://localhost:3002/api/v1/health
 
-# Analytics API health
+# Analytics API health (direct)
 curl http://localhost:8080/health
 
-# Analytics stats consumed by scraper frontend
-curl http://localhost:8080/api/v1/stats/detailed
+# Analytics stats consumed by scraper frontend (via Vite proxy — same path as production)
+curl http://localhost:5173/analytics-api/api/v1/stats
 ```
 
 Open `http://localhost:5173` and confirm analytics stats render in the dashboard.

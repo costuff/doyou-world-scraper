@@ -6,7 +6,8 @@ Use this checklist before every push to `main`.
 
 - [ ] Confirm clean git state: `git status`
 - [ ] Ensure both version files are bumped (`VERSION` and `frontend/VERSION`)
-- [ ] Confirm `.env` values are correct (`API_PORT`, `FRONTEND_PORT`, `NAS_PATH`, `VITE_ANALYTICS_API_URL`)
+- [ ] Confirm `.env` values are correct (`API_PORT`, `FRONTEND_PORT`, `NAS_PATH`)
+  - Note: `VITE_ANALYTICS_API_URL` is baked into the Dockerfile as `/analytics-api` — do **not** set it in `.env`
 
 ## 2) Run Backend Quality Gates
 
@@ -42,6 +43,8 @@ Use this checklist before every push to `main`.
 
 ## 7) Production Verification (after push)
 
-- [ ] Confirm GHCR images updated
-- [ ] Confirm Watchtower pulled new image(s)
-- [ ] Confirm API and frontend are healthy on target host
+- [ ] Confirm GHCR images updated (GitHub Actions workflow completes green)
+- [ ] Confirm Watchtower pulled new image(s): `docker logs --tail 30 watchtower`
+- [ ] Confirm scraper API healthy: `curl https://do-you-world-scraper.costuff.work/api/v1/health`
+- [ ] Confirm analytics proxy healthy: `curl https://do-you-world-scraper.costuff.work/analytics-api/api/v1/stats`
+- [ ] Confirm frontend loads and analytics stats render in the dashboard
