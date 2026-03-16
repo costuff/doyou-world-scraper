@@ -66,7 +66,7 @@ services:
       DOCKER_API_VERSION: "1.44"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.docker/config.json:/config.json:ro  # For authenticated GHCR pulls
+      - ~/.docker/watchtower-config.json:/config.json:ro  # Static GHCR credentials (keychain-extracted)
     networks:
       - doyou-network
     command: --cleanup --interval 300
