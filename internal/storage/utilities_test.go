@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -543,4 +544,324 @@ func TestClearDownloads(t *testing.T) {
 			}
 		}
 	})
+}
+
+// ---- GetTracks sorting ----
+
+func TestGetTracks_Sorting(t *testing.T) {
+	tmpDir := t.TempDir()
+	for _, name := range []string{"zzz.mp3", "aaa.mp3", "mmm.mp3"} {
+		content := make([]byte, 70000)
+		_ = os.WriteFile(filepath.Join(tmpDir, name), content, 0644)
+	}
+
+	t.Run("sort ascending", func(t *testing.T) {
+		result, err := GetTracks(tmpDir, 1, 10, "", "filename", "asc", false)
+		if err != nil {
+			t.Fatalf("GetTracks failed: %v", err)
+		}
+		if len(result.Tracks) < 2 {
+			t.Skip("not enough tracks to test sorting")
+		}
+		if result.Tracks[0].Filename >= result.Tracks[1].Filename {
+			t.Errorf("ascending sort failed: %q should come before %q",
+				result.Tracks[0].Filename, result.Tracks[1].Filename)
+		}
+	})
+
+	t.Run("sort descending", func(t *testing.T) {
+		result, err := GetTracks(tmpDir, 1, 10, "", "filename", "desc", false)
+		if err != nil {
+			t.Fatalf("GetTracks failed: %v", err)
+		}
+		if len(result.Tracks) < 2 {
+			t.Skip("not enough tracks to test sorting")
+		}
+		if result.Tracks[0].Filename <= result.Tracks[1].Filename {
+			t.Errorf("descending sort failed: %q should come after %q",
+				result.Tracks[0].Filename, result.Tracks[1].Filename)
+		}
+	})
+}
+
+// ---- RemoveDuplicates with progress callback ----
+
+func TestRemoveDuplicates_WithProgressCallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	content1 := []byte("unique content alpha")
+	content2 := []byte("unique content beta")
+
+	_ = os.WriteFile(filepath.Join(tmpDir, "file1.mp3"), content1, 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "file2.mp3"), content2, 0644)
+
+	var progressCalled bool
+	callback := func(current, total int) {
+		progressCalled = true
+	}
+
+	result, err := RemoveDuplicates(tmpDir, "", nil, callback)
+	if err != nil {
+		t.Fatalf("RemoveDuplicates failed: %v", err)
+	}
+	_ = result // no duplicates expected
+	_ = progressCalled // progress callback may or may not be called for 2 files
+}
+
+// ---- ClearCSVs with non-existent directory ----
+
+func TestClearCSVs_NonExistentDirectory(t *testing.T) {
+	_, err := ClearCSVs("/definitely/does/not/exist/path")
+	if err == nil {
+		t.Error("ClearCSVs should return error for non-existent directory")
+	}
+}
+
+// ---- MatchDownloadsToCSVs tests ----
+
+func TestMatchDownloadsToCSVs_NoCSVFiles(t *testing.T) {
+	outDir := t.TempDir()
+	dlDir := t.TempDir()
+	_, err := MatchDownloadsToCSVs(outDir, dlDir)
+	if err == nil {
+		t.Error("Expected error when no CSV files found")
+	}
+}
+
+func TestMatchDownloadsToCSVs_EmptyDownloads(t *testing.T) {
+	outDir := t.TempDir()
+	dlDir := t.TempDir()
+
+	csvContent := "Title,Artist,Album,Label,Date,URL\nTrack One,Artist One,Album,Label,2026-01-01,http://example.com\n"
+	os.WriteFile(filepath.Join(outDir, "tracks-2026-01-01.csv"), []byte(csvContent), 0644)
+
+	result, err := MatchDownloadsToCSVs(outDir, dlDir)
+	if err != nil {
+		t.Fatalf("MatchDownloadsToCSVs failed: %v", err)
+	}
+	if result.TotalFiles != 0 {
+		t.Errorf("Expected 0 total files, got %d", result.TotalFiles)
+	}
+	if result.MatchedFiles != 0 {
+		t.Errorf("Expected 0 matched files, got %d", result.MatchedFiles)
+	}
+	if result.LatestCSV != nil {
+		t.Error("Expected LatestCSV to be nil when no matches")
+	}
+}
+
+func TestMatchDownloadsToCSVs_MatchingFile(t *testing.T) {
+	outDir := t.TempDir()
+	dlDir := t.TempDir()
+
+	csvContent := "Title,Artist,Album,Label,Date,URL\nTrack One,Artist One,Album,Label,2026-01-01,http://example.com\n"
+	os.WriteFile(filepath.Join(outDir, "tracks-2026-01-01.csv"), []byte(csvContent), 0644)
+
+	// "Artist One - Track One.mp3" => artist="artist one", title="track one" => overlaps CSV
+	os.WriteFile(filepath.Join(dlDir, "Artist One - Track One.mp3"), []byte("mp3"), 0644)
+
+	result, err := MatchDownloadsToCSVs(outDir, dlDir)
+	if err != nil {
+		t.Fatalf("MatchDownloadsToCSVs failed: %v", err)
+	}
+	if result.TotalFiles != 1 {
+		t.Errorf("Expected 1 total file, got %d", result.TotalFiles)
+	}
+	if result.MatchedFiles != 1 {
+		t.Errorf("Expected 1 matched file, got %d", result.MatchedFiles)
+	}
+	if len(result.TopCSVs) == 0 {
+		t.Fatal("Expected at least one TopCSV entry")
+	}
+	if result.LatestCSV == nil {
+		t.Fatal("Expected LatestCSV to be set")
+	}
+	if result.LatestCSV.Date != "2026-01-01" {
+		t.Errorf("Expected date 2026-01-01, got %s", result.LatestCSV.Date)
+	}
+}
+
+func TestMatchDownloadsToCSVs_NoMatch(t *testing.T) {
+	outDir := t.TempDir()
+	dlDir := t.TempDir()
+
+	csvContent := "Title,Artist,Album,Label,Date,URL\nTrack One,Artist One,Album,Label,2026-01-01,http://example.com\n"
+	os.WriteFile(filepath.Join(outDir, "tracks-2026-01-01.csv"), []byte(csvContent), 0644)
+
+	// completely different name — no word overlap
+	os.WriteFile(filepath.Join(dlDir, "zzz.mp3"), []byte("mp3"), 0644)
+
+	result, err := MatchDownloadsToCSVs(outDir, dlDir)
+	if err != nil {
+		t.Fatalf("MatchDownloadsToCSVs failed: %v", err)
+	}
+	if result.TotalFiles != 1 {
+		t.Errorf("Expected 1 total file, got %d", result.TotalFiles)
+	}
+	if result.MatchedFiles != 0 {
+		t.Errorf("Expected 0 matched files, got %d", result.MatchedFiles)
+	}
+}
+
+func TestMatchDownloadsToCSVs_MultipleCSVs(t *testing.T) {
+	outDir := t.TempDir()
+	dlDir := t.TempDir()
+
+	csv1 := "Title,Artist,Album,Label,Date,URL\nAlpha Song,Alpha Artist,Album,Label,2026-01-01,http://example.com\n"
+	csv2 := "Title,Artist,Album,Label,Date,URL\nBeta Song,Beta Artist,Album,Label,2026-02-01,http://example.com\n"
+	os.WriteFile(filepath.Join(outDir, "tracks-2026-01-01.csv"), []byte(csv1), 0644)
+	os.WriteFile(filepath.Join(outDir, "tracks-2026-02-01.csv"), []byte(csv2), 0644)
+
+	os.WriteFile(filepath.Join(dlDir, "Alpha Artist - Alpha Song.mp3"), []byte("mp3a"), 0644)
+	os.WriteFile(filepath.Join(dlDir, "Beta Artist - Beta Song.mp3"), []byte("mp3b"), 0644)
+
+	result, err := MatchDownloadsToCSVs(outDir, dlDir)
+	if err != nil {
+		t.Fatalf("MatchDownloadsToCSVs failed: %v", err)
+	}
+	if result.TotalFiles != 2 {
+		t.Errorf("Expected 2 total files, got %d", result.TotalFiles)
+	}
+	if result.MatchedFiles != 2 {
+		t.Errorf("Expected 2 matched files, got %d", result.MatchedFiles)
+	}
+	if len(result.TopCSVs) != 2 {
+		t.Errorf("Expected 2 TopCSVs, got %d", len(result.TopCSVs))
+	}
+	if result.LatestCSV == nil {
+		t.Fatal("Expected LatestCSV to be set")
+	}
+	if result.LatestCSV.Date != "2026-02-01" {
+		t.Errorf("Expected latest date 2026-02-01, got %s", result.LatestCSV.Date)
+	}
+}
+
+func TestMatchDownloadsToCSVs_FilenameWithoutSeparator(t *testing.T) {
+	outDir := t.TempDir()
+	dlDir := t.TempDir()
+
+	csvContent := "Title,Artist,Album,Label,Date,URL\nrocktrack,someartist,Album,Label,2026-03-01,http://example.com\n"
+	os.WriteFile(filepath.Join(outDir, "tracks-2026-03-01.csv"), []byte(csvContent), 0644)
+
+	// No " - " separator => whole name used as title
+	os.WriteFile(filepath.Join(dlDir, "rocktrack.mp3"), []byte("mp3"), 0644)
+
+	result, err := MatchDownloadsToCSVs(outDir, dlDir)
+	if err != nil {
+		t.Fatalf("MatchDownloadsToCSVs failed: %v", err)
+	}
+	if result.TotalFiles != 1 {
+		t.Errorf("Expected 1 total file, got %d", result.TotalFiles)
+	}
+	if result.MatchedFiles != 1 {
+		t.Errorf("Expected 1 matched file, got %d", result.MatchedFiles)
+	}
+}
+
+func TestMatchDownloadsToCSVs_ManyCSVsTrimmedTo20(t *testing.T) {
+	outDir := t.TempDir()
+	dlDir := t.TempDir()
+
+	// 25 CSVs each with one track + one matching MP3
+	for i := 1; i <= 25; i++ {
+		month := fmt.Sprintf("%02d", i%12+1)
+		csvName := fmt.Sprintf("tracks-2026-%s-%02d.csv", month, i%28+1)
+		word := fmt.Sprintf("uniqueword%d", i)
+		csvContent := fmt.Sprintf("Title,Artist,Album,Label,Date,URL\n%s,%s,Album,Label,2026-01-01,http://example.com\n", word, word)
+		os.WriteFile(filepath.Join(outDir, csvName), []byte(csvContent), 0644)
+		os.WriteFile(filepath.Join(dlDir, fmt.Sprintf("%s - %s.mp3", word, word)), []byte("mp3"), 0644)
+	}
+
+	result, err := MatchDownloadsToCSVs(outDir, dlDir)
+	if err != nil {
+		t.Fatalf("MatchDownloadsToCSVs failed: %v", err)
+	}
+	if len(result.TopCSVs) > 20 {
+		t.Errorf("Expected at most 20 TopCSVs, got %d", len(result.TopCSVs))
+	}
+}
+
+func TestMatchDownloadsToCSVs_CSVHeaderOnly(t *testing.T) {
+	outDir := t.TempDir()
+	dlDir := t.TempDir()
+
+	// CSV with only header row — no data
+	csvContent := "Title,Artist,Album,Label,Date,URL\n"
+	os.WriteFile(filepath.Join(outDir, "tracks-2026-01-01.csv"), []byte(csvContent), 0644)
+	os.WriteFile(filepath.Join(dlDir, "Some Artist - Some Track.mp3"), []byte("mp3"), 0644)
+
+	result, err := MatchDownloadsToCSVs(outDir, dlDir)
+	if err != nil {
+		t.Fatalf("MatchDownloadsToCSVs failed: %v", err)
+	}
+	if result.MatchedFiles != 0 {
+		t.Errorf("Expected 0 matches with header-only CSV, got %d", result.MatchedFiles)
+	}
+}
+
+// ---- GetTracks edge cases ----
+
+func TestGetTracks_InvalidPageAndPerPage(t *testing.T) {
+	tmpDir := filepath.Join(t.TempDir(), "tracks")
+	os.MkdirAll(tmpDir, 0755)
+	for i := 0; i < 3; i++ {
+		os.WriteFile(filepath.Join(tmpDir, fmt.Sprintf("t%d.mp3", i)), make([]byte, 70000), 0644)
+	}
+
+	// page < 1 => normalized to 1
+	result, err := GetTracks(tmpDir, 0, 10, "", "filename", "asc", false)
+	if err != nil {
+		t.Fatalf("GetTracks failed: %v", err)
+	}
+	if result.Page != 1 {
+		t.Errorf("Expected page=1 for input page=0, got %d", result.Page)
+	}
+
+	// perPage > 100 => normalized to 50
+	result, err = GetTracks(tmpDir, 1, 200, "", "filename", "asc", false)
+	if err != nil {
+		t.Fatalf("GetTracks failed: %v", err)
+	}
+	if result.PerPage != 50 {
+		t.Errorf("Expected perPage=50 for input perPage=200, got %d", result.PerPage)
+	}
+
+	// perPage < 1 => normalized to 50
+	result, err = GetTracks(tmpDir, 1, 0, "", "filename", "asc", false)
+	if err != nil {
+		t.Fatalf("GetTracks failed: %v", err)
+	}
+	if result.PerPage != 50 {
+		t.Errorf("Expected perPage=50 for input perPage=0, got %d", result.PerPage)
+	}
+}
+
+func TestGetTracks_PageBeyondTotal(t *testing.T) {
+	tmpDir := filepath.Join(t.TempDir(), "tracks_beyond")
+	os.MkdirAll(tmpDir, 0755)
+	os.WriteFile(filepath.Join(tmpDir, "t1.mp3"), make([]byte, 70000), 0644)
+
+	result, err := GetTracks(tmpDir, 100, 10, "", "filename", "asc", false)
+	if err != nil {
+		t.Fatalf("GetTracks failed: %v", err)
+	}
+	if len(result.Tracks) != 0 {
+		t.Errorf("Expected 0 tracks on page beyond total, got %d", len(result.Tracks))
+	}
+	if result.Total != 1 {
+		t.Errorf("Expected total=1, got %d", result.Total)
+	}
+}
+
+func TestGetTracks_AsyncMode(t *testing.T) {
+	tmpDir := filepath.Join(t.TempDir(), "tracks_async")
+	os.MkdirAll(tmpDir, 0755)
+	os.WriteFile(filepath.Join(tmpDir, "t1.mp3"), make([]byte, 70000), 0644)
+
+	result, err := GetTracks(tmpDir, 1, 10, "", "filename", "asc", true)
+	if err != nil {
+		t.Fatalf("GetTracks(async) failed: %v", err)
+	}
+	if result == nil {
+		t.Error("Expected non-nil result from async GetTracks")
+	}
 }

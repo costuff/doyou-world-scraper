@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	fiber_websocket "github.com/gofiber/websocket/v2"
+
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -263,4 +265,207 @@ func TestJobToMap(t *testing.T) {
 	if result, ok := jobMap["result"].(fiber.Map); !ok || result["result_key"] != "result_value" {
 		t.Error("ToMap should include result data")
 	}
+}
+
+// ---- CancelJob ----
+
+func TestCancelJob_Running(t *testing.T) {
+	ClearAllJobs()
+	job := NewJob("cancel_test", fiber.Map{})
+	job.Start()
+
+	err := CancelJob(job.ID)
+	if err != nil {
+		t.Errorf("CancelJob() unexpected error: %v", err)
+	}
+	if job.Status != StatusCancelled {
+		t.Errorf("expected status cancelled, got %s", job.Status)
+	}
+	if job.Error != "Job cancelled by user" {
+		t.Errorf("expected cancel error message, got %q", job.Error)
+	}
+	if job.EndedAt == nil {
+		t.Error("EndedAt should be set after cancel")
+	}
+}
+
+func TestCancelJob_NotFound(t *testing.T) {
+	err := CancelJob("non-existent-job-id")
+	if err == nil {
+		t.Error("CancelJob() expected error for non-existent ID, got nil")
+	}
+}
+
+func TestCancelJob_AlreadyCompleted(t *testing.T) {
+	ClearAllJobs()
+	job := NewJob("completed_job", fiber.Map{})
+	job.Complete(fiber.Map{"result": "done"})
+
+	// Cancelling a completed job should be a no-op (no error, stays completed)
+	err := CancelJob(job.ID)
+	if err != nil {
+		t.Errorf("CancelJob() on completed job unexpected error: %v", err)
+	}
+	if job.Status != StatusCompleted {
+		t.Errorf("completed job should stay completed, got %s", job.Status)
+	}
+}
+
+func TestCancelJob_AlreadyFailed(t *testing.T) {
+	ClearAllJobs()
+	job := NewJob("failed_job", fiber.Map{})
+	job.Fail("original error")
+
+	err := CancelJob(job.ID)
+	if err != nil {
+		t.Errorf("CancelJob() on failed job unexpected error: %v", err)
+	}
+	if job.Status != StatusFailed {
+		t.Errorf("failed job should stay failed, got %s", job.Status)
+	}
+}
+
+// ---- IsCancelled ----
+
+func TestIsCancelled_NotCancelled(t *testing.T) {
+	job := NewJob("running_job", fiber.Map{})
+	job.Start()
+
+	if job.IsCancelled() {
+		t.Error("IsCancelled() should be false for a running job")
+	}
+}
+
+func TestIsCancelled_AfterCancel(t *testing.T) {
+	job := NewJob("cancel_me", fiber.Map{})
+	job.Start()
+	job.Cancel()
+
+	if !job.IsCancelled() {
+		t.Error("IsCancelled() should be true after Cancel()")
+	}
+}
+
+func TestIsCancelled_NewJob(t *testing.T) {
+	job := NewJob("new_pending", fiber.Map{})
+	if job.IsCancelled() {
+		t.Error("IsCancelled() should be false for a new pending job")
+	}
+}
+
+// ---- GetJob not found ----
+
+func TestGetJob_NotFound(t *testing.T) {
+	result := GetJob("this-id-does-not-exist")
+	if result != nil {
+		t.Error("GetJob() should return nil for non-existent ID")
+	}
+}
+
+// ---- CleanupOldJobs does not remove cancelled jobs ----
+
+func TestCleanupOldJobs_KeesCancelledJobs(t *testing.T) {
+	ClearAllJobs()
+
+	cancelledJob := NewJob("cancelled", fiber.Map{})
+	cancelledJob.Start()
+	cancelledJob.Cancel()
+	// Make it look old
+	cancelledJob.UpdatedAt = time.Now().Add(-25 * time.Hour)
+
+	CleanupOldJobs()
+
+	// Cancelled jobs should NOT be cleaned up (only completed/failed)
+	if GetJob(cancelledJob.ID) == nil {
+		t.Error("cancelled jobs should NOT be cleaned up by CleanupOldJobs")
+	}
+}
+
+// ---- Job uniqueness ----
+
+func TestNewJob_UniqueIDs(t *testing.T) {
+	ClearAllJobs()
+	j1 := NewJob("type", fiber.Map{})
+	j2 := NewJob("type", fiber.Map{})
+	if j1.ID == j2.ID {
+		t.Error("Two jobs should have different IDs")
+	}
+}
+
+// ---- CreatedAt/UpdatedAt timing ----
+
+func TestJob_TimestampsSet(t *testing.T) {
+	before := time.Now()
+	job := NewJob("timing_test", fiber.Map{})
+	after := time.Now()
+
+	if job.CreatedAt.Before(before) || job.CreatedAt.After(after) {
+		t.Errorf("CreatedAt %v not between %v and %v", job.CreatedAt, before, after)
+	}
+	if job.UpdatedAt.Before(before) || job.UpdatedAt.After(after) {
+		t.Errorf("UpdatedAt %v not between %v and %v", job.UpdatedAt, before, after)
+	}
+}
+
+// ---- WebSocket / BroadcastJobUpdate tests ----
+
+func TestBroadcastJobUpdate_NilHub(t *testing.T) {
+	// Save and reset hub to nil to test early return path
+	saved := hub
+	hub = nil
+	defer func() { hub = saved }()
+
+	job := NewJob("nil_hub_test", fiber.Map{})
+	// Must not panic
+	BroadcastJobUpdate(job)
+}
+
+func TestInitWebSocketHub_SetsHub(t *testing.T) {
+	// Save and reset hub
+	saved := hub
+	hub = nil
+	defer func() {
+		// Restore (we can't easily stop the goroutine from the old hub)
+		if saved != nil {
+			hub = saved
+		}
+	}()
+
+	InitWebSocketHub()
+	if hub == nil {
+		t.Error("InitWebSocketHub should set hub to non-nil")
+	}
+}
+
+func TestBroadcastJobUpdate_WithHub(t *testing.T) {
+	// Ensure hub is initialized
+	if hub == nil {
+		InitWebSocketHub()
+	}
+
+	job := NewJob("broadcast_test", fiber.Map{"key": "val"})
+	job.Complete(fiber.Map{"result": "ok"})
+
+	// Must not panic — message goes to broadcast channel, run() will consume it
+	BroadcastJobUpdate(job)
+
+	// Give run() goroutine time to process the broadcast
+	time.Sleep(20 * time.Millisecond)
+}
+
+func TestBroadcastJobUpdate_ChannelFull(t *testing.T) {
+	// Create a temporary hub with an unbuffered broadcast channel to force the default: path
+	tempHub := &WebSocketHub{
+		clients:    make(map[*WebSocketClient]bool),
+		broadcast:  make(chan WSMessage), // unbuffered — will block if nobody reads
+		register:   make(chan *fiber_websocket.Conn),
+		unregister: make(chan *fiber_websocket.Conn),
+	}
+	saved := hub
+	hub = tempHub
+	defer func() { hub = saved }()
+
+	job := NewJob("channel_full_test", fiber.Map{})
+	// Nobody is reading from tempHub.broadcast — should hit default:
+	BroadcastJobUpdate(job)
 }

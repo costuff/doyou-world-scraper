@@ -156,6 +156,10 @@ func TestScrapeDateEndpoint(t *testing.T) {
 		if job["status"] != "pending" && job["status"] != "running" {
 			t.Errorf("Job status should be 'pending' or 'running', got '%v'", job["status"])
 		}
+		// Cancel immediately so the background goroutine does not launch Chrome
+		if jobID, ok := job["id"].(string); ok {
+			jobs.CancelJob(jobID)
+		}
 	} else {
 		t.Error("Response should include job object")
 	}
@@ -494,6 +498,9 @@ func TestScrapeMonthEndpoint(t *testing.T) {
 	// Just check that we got a job response, don't verify exact message
 	if job, ok := result["job"].(map[string]interface{}); !ok || job["type"] != "scrape_month" {
 		t.Error("Should return scrape_month job")
+	} else if jobID, ok := job["id"].(string); ok {
+		// Cancel immediately so the background goroutine does not launch Chrome
+		jobs.CancelJob(jobID)
 	}
 }
 
@@ -524,6 +531,9 @@ func TestScrapeYearEndpoint(t *testing.T) {
 	// Just check that we got a job response, don't verify exact message
 	if job, ok := result["job"].(map[string]interface{}); !ok || job["type"] != "scrape_year" {
 		t.Error("Should return scrape_year job")
+	} else if jobID, ok := job["id"].(string); ok {
+		// Cancel immediately so the background goroutine does not launch Chrome
+		jobs.CancelJob(jobID)
 	}
 }
 

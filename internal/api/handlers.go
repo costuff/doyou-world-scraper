@@ -156,6 +156,11 @@ func (h *Handlers) HandleScrapeDate(c *fiber.Ctx) error {
 		scrapeSemaphore <- struct{}{}
 		defer func() { <-scrapeSemaphore }() // Release when done
 
+		// Don't launch Chrome if job was cancelled while waiting for semaphore
+		if job.IsCancelled() {
+			return
+		}
+
 		// Start job now that we have resources
 		job.Start()
 
@@ -198,6 +203,11 @@ func (h *Handlers) HandleScrapeMonth(c *fiber.Ctx) error {
 		// Acquire semaphore (blocks if 2 jobs already running) - Fix 4
 		scrapeSemaphore <- struct{}{}
 		defer func() { <-scrapeSemaphore }() // Release when done
+
+		// Don't launch Chrome if job was cancelled while waiting for semaphore
+		if job.IsCancelled() {
+			return
+		}
 
 		// Start job now that we have resources
 		job.Start()
@@ -244,6 +254,11 @@ func (h *Handlers) HandleScrapeYear(c *fiber.Ctx) error {
 		// Acquire semaphore (blocks if 2 jobs already running) - Fix 4
 		scrapeSemaphore <- struct{}{}
 		defer func() { <-scrapeSemaphore }() // Release when done
+
+		// Don't launch Chrome if job was cancelled while waiting for semaphore
+		if job.IsCancelled() {
+			return
+		}
 
 		// Start job now that we have resources
 		job.Start()
