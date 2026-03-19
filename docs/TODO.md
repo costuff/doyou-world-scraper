@@ -368,7 +368,10 @@ doyou-world-scraper/
 - [x] Expose the web dashboard on a configurable port for remote access to the music library
 - [x] GitHub Actions CI/CD with Watchtower auto-deployment
 - [ ] Set up scheduled jobs for scraping and downloads
-- [ ] Add authentication/user management for the dashboard
+- [ ] **Authentication (personal use → multi-user)**
+  - Short term: add basic auth or a simple token gate to the dashboard (currently open to anyone on the tunnel)
+  - Long term: proper user accounts so others can have their own library (scrape history, downloads, NAS folder per user)
+  - Candidate: Cloudflare Access (zero-config, sits in front of the tunnel) for the quick win, then migrate to in-app auth when multi-user is needed
 
 ### Development Workflow & Testing
 - [x] **Document local development setup** - Guide for running without Docker for faster iteration (see DEVELOPMENT.md)
