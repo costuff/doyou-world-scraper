@@ -90,6 +90,14 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
   - See docs/ANALYTICS_INTEGRATION.md for setup
 - [ ] **Frontend Test Suite (PRIORITY 3)** - Install Vitest + React Testing Library + jsdom, add comprehensive tests for all components, hooks, and services (currently 0% coverage)
 - [ ] **Music exploration graph (PRIORITY 4)** - Energy vs Danceability scatter plot, BPM histogram, key/mode distribution, interactive filtering by audio features; data sourced from analytics API `/api/v1/tracks`
+- [ ] **Emotional graph explorer (PRIORITY 5)** — Force-directed graph (D3.js / react-force-graph) where each node = a song, edges = similarity score from analytics `track_similarity` table
+  - Node color = dominant emotion; node size = confidence; edge thickness = similarity score (threshold 0.7)
+  - Clicking a node plays the song in the existing audio player bar
+  - Dragging toward emotion "pole" anchor nodes filters/pulls visible songs
+  - The graph is infinite — you drift from emotion to emotion by following edges
+  - Emotion dimensions: `tension`, `melancholy`, `euphoria`, `aggression`, `serenity`, `nostalgia`, `sensuality`, `power`
+  - Sidebar on node select: track name, dominant emotion, feature breakdown, play button
+  - Requires analytics endpoints: `GET /api/v1/tracks/:id/similar` + `GET /api/v1/tracks/:id/emotions`
 - [ ] **UI overhaul** - Dark theme polish, animated chart transitions, improved visual hierarchy, better mobile layout
 
 ### Music Metadata & Analysis (Basic)
