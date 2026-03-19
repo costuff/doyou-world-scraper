@@ -3,6 +3,20 @@
 ## Project Overview
 This is a full-stack music scraper and management system for DoYou World Radio. It scrapes daily playlists from doyoutrackid.com, downloads tracks from streaming platforms, manages duplicates, and provides a REST API for automation.
 
+## 📚 Always Read These Docs First
+
+Before making changes, read the relevant docs in `docs/`:
+
+- **`docs/TODO.md`** — current priorities and roadmap
+- **`docs/DUAL_REPO_DEVELOPMENT.md`** — how this repo and `doyou-music-analytics` work together locally and in production
+- **`docs/PREPUSH_CHECKLIST.md`** — required checks before every push
+- **`docs/DEPLOYMENT.md`** — production setup on Mac Mini
+- **`docs/DEVELOPMENT.md`** — local dev workflow without Docker
+- **`docs/DOCKER.md`** — Docker build and run reference
+- **`docs/ANALYTICS_INTEGRATION.md`** — how the scraper frontend connects to the analytics service
+- **`docs/CHROME_CRASH_FIX.md`** — Chrome memory management implementation
+- **`docs/TEST_PLAN.md`** — test strategy and coverage targets
+
 ## Tech Stack
 - **Backend**: Go 1.23+ with Fiber v2 web framework
 - **Scraping**: chromedp (headless Chrome) for web scraping
@@ -320,14 +334,17 @@ func (h *Handlers) HandleSomeAction(c *fiber.Ctx) error {
   - Docker development: Port 3000 (docker-compose.yml)
   - Docker production: Port 3001 (docker-compose.prod.yml, for Cloudflare tunnel)
   - Frontend Vite dev server: Port 5173
+- **NAS Path (machine-specific)**: Set `NAS_PATH` in `.env` to wherever the music drive is mounted on each machine — gitignored, differs per machine:
+  - Mac Mini (production): `NAS_PATH=/Volumes/Expansion/ExtHDD-8TB/Music`
+  - Local dev machine: `NAS_PATH=/wherever/your/nas/is/mounted`
+- **Analytics integration**: The scraper frontend nginx proxies `/analytics-api/` → `doyou-analytics-api:8080` (analytics container on shared `doyou-network`). `VITE_ANALYTICS_API_URL=/analytics-api` is baked into the frontend image at build time via Dockerfile ARG — no `.env` change needed. Vite dev server proxies the same path to `http://localhost:8080` locally.
+- **Dual-repo setup**: Both this repo and `doyou-music-analytics` run on the same Mac Mini. They share `doyou-network` and a single Watchtower instance (in this stack). See `docs/DUAL_REPO_DEVELOPMENT.md` for local dev workflow.
 - All API operations return 202 Accepted immediately with job ID
 - Check job status with `GET /api/v1/jobs/:id` or via WebSocket
 - CSV column 5 (index 5) contains the Listen URL by default
-- NAS path: Configurable via h.cfg.NASPath (default: empty for local, Docker auto-detects /nas)
-- Set NAS_PATH environment variable for local NAS access (e.g., /Volumes/ExtHDD-8TB/Music/doyou-world-radio-tracks)
 - chromedp needs Chrome/Chromium installed
 - yt-dlp must be available in PATH
-- Frontend proxies `/api` requests to backend automatically
+- Frontend proxies `/api` and `/analytics-api` requests to backend automatically (Vite dev) or via nginx (production)
 - Stats endpoint checks if NAS exists before scanning
 
 ## Version Management (⚠️ CRITICAL - DO THIS BEFORE EVERY COMMIT)
