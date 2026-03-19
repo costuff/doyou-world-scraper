@@ -233,6 +233,7 @@ func TestHandleAnalyzeAll_JobCompletes(t *testing.T) {
 		t.Logf("Job still running after timeout — acceptable in fast test env")
 	}
 }
+
 // ---- HandleClearNASDownloads (register route in a local test app) ----
 
 func newTestHandlers() *Handlers {

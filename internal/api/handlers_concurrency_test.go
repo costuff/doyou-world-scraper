@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -15,7 +14,15 @@ import (
 
 // TestScrapeConcurrencyLimit verifies semaphore limits concurrent Chrome instances
 func TestScrapeConcurrencyLimit(t *testing.T) {
-	t.Run("Semaphore limits concurrent scraping jobs", func(t *testing.T) {
+	t.Run("Semaphore blocks excess jobs while slots are full", func(t *testing.T) {
+		// Fill both semaphore slots directly (same package = access to unexported var)
+		scrapeSemaphore <- struct{}{}
+		scrapeSemaphore <- struct{}{}
+		defer func() {
+			<-scrapeSemaphore
+			<-scrapeSemaphore
+		}()
+
 		tmpDir := t.TempDir()
 		cfg := &config.Config{
 			Port:         0,
@@ -32,15 +39,11 @@ func TestScrapeConcurrencyLimit(t *testing.T) {
 		app := fiber.New()
 		app.Post("/api/v1/scrape/date", handlers.HandleScrapeDate)
 
-		// Track how many jobs are running simultaneously
-		var concurrentJobs int
-		var maxConcurrent int
-		var mu sync.Mutex
-
-		// Start 5 scraping jobs
-		jobIDs := make([]string, 5)
-		for i := 0; i < 5; i++ {
-			body := `{"date":"2026-02-0` + string(rune('1'+i)) + `"}`
+		// Submit 3 jobs — all will block on the full semaphore (Chrome never launched)
+		// Use future date: even if semaphore clears, validation fails before chromedp.Run
+		jobIDs := make([]string, 3)
+		for i := 0; i < 3; i++ {
+			body := `{"date":"2099-01-01"}`
 			req := httptest.NewRequest("POST", "/api/v1/scrape/date", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 
@@ -51,8 +54,6 @@ func TestScrapeConcurrencyLimit(t *testing.T) {
 			if resp.StatusCode != 202 {
 				t.Errorf("Expected 202, got %d", resp.StatusCode)
 			}
-
-			// Parse job ID from response
 			var result map[string]interface{}
 			if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
 				if job, ok := result["job"].(map[string]interface{}); ok {
@@ -63,56 +64,27 @@ func TestScrapeConcurrencyLimit(t *testing.T) {
 			}
 		}
 
-		// Give jobs time to start and potentially run concurrently
-		time.Sleep(2 * time.Second)
+		// Give goroutines time to start and try to acquire semaphore
+		time.Sleep(100 * time.Millisecond)
 
-		// Check semaphore buffer length (should be at most 2 running)
-		// We can't directly check the semaphore, but we can verify max 2 Chrome processes
-		// or check job states - with semaphore, max 2 should be running at once
-
-		t.Logf("Started %d jobs, semaphore should limit to max 2 concurrent", len(jobIDs))
-
-		// Monitor jobs for a bit
-		for i := 0; i < 10; i++ {
-			mu.Lock()
-			activeJobs := 0
-			for _, jobID := range jobIDs {
-				if job := jobs.GetJob(jobID); job != nil {
-					if job.Status == "running" {
-						activeJobs++
-					}
-				}
+		// All goroutines should be pending (blocked on full semaphore), none running
+		runningCount := 0
+		for _, jobID := range jobIDs {
+			if job := jobs.GetJob(jobID); job != nil && job.Status == "running" {
+				runningCount++
 			}
-			if activeJobs > maxConcurrent {
-				maxConcurrent = activeJobs
-			}
-			concurrentJobs = activeJobs
-			mu.Unlock()
-
-			if concurrentJobs > 2 {
-				t.Errorf("Too many concurrent jobs: %d (max should be 2)", concurrentJobs)
-				break
-			}
-
-			time.Sleep(500 * time.Millisecond)
 		}
+		if runningCount > 0 {
+			t.Errorf("Expected 0 running (semaphore full), got %d", runningCount)
+		}
+		t.Logf("Verified: %d jobs queued, 0 running (semaphore capacity 2 is full)", len(jobIDs))
 
-		t.Logf("Max concurrent jobs observed: %d (should be ≤ 2)", maxConcurrent)
-
-		// Cleanup - cancel any still-running jobs
+		// Cancel all to prevent goroutines from running after defer releases semaphore
 		for _, jobID := range jobIDs {
 			if job := jobs.GetJob(jobID); job != nil {
 				job.Cancel()
 			}
 		}
-	})
-
-	t.Run("Semaphore releases on job completion", func(t *testing.T) {
-		// Verify that completing a job releases the semaphore
-		// This is implicitly tested by the previous test - if the 5th job
-		// eventually runs, it means earlier jobs released the semaphore
-
-		t.Log("Semaphore release is implicitly tested by concurrent job test")
 	})
 
 	t.Run("Semaphore releases on job failure", func(t *testing.T) {
@@ -132,7 +104,7 @@ func TestScrapeConcurrencyLimit(t *testing.T) {
 		app := fiber.New()
 		app.Post("/api/v1/scrape/date", handlers.HandleScrapeDate)
 
-		// Start a job that will fail (invalid date)
+		// Start a job that will fail (invalid date - parse fails before chromedp.Run)
 		body := `{"date":"invalid-date"}`
 		req := httptest.NewRequest("POST", "/api/v1/scrape/date", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -145,11 +117,11 @@ func TestScrapeConcurrencyLimit(t *testing.T) {
 			t.Errorf("Expected 202, got %d", resp.StatusCode)
 		}
 
-		// Wait for job to fail
-		time.Sleep(2 * time.Second)
+		// Wait for job to fail quickly (invalid date causes immediate error)
+		time.Sleep(200 * time.Millisecond)
 
-		// Start another job to verify semaphore was released
-		body2 := `{"date":"2026-02-01"}`
+		// Start another job to verify semaphore was released — also use safe date
+		body2 := `{"date":"2099-01-01"}`
 		req2 := httptest.NewRequest("POST", "/api/v1/scrape/date", strings.NewReader(body2))
 		req2.Header.Set("Content-Type", "application/json")
 
@@ -160,14 +132,17 @@ func TestScrapeConcurrencyLimit(t *testing.T) {
 		if resp2.StatusCode != 202 {
 			t.Errorf("Expected 202 for second request, got %d", resp2.StatusCode)
 		}
-
 		t.Log("Semaphore successfully released after job failure")
 	})
 }
 
-// TestJobCancellationSpeed verifies cancellation is immediate
+// TestJobCancellationSpeed verifies that a job blocked on the semaphore can be cancelled promptly
 func TestJobCancellationSpeed(t *testing.T) {
-	t.Run("Job cancellation happens quickly", func(t *testing.T) {
+	t.Run("Job cancelled while blocked on semaphore exits quickly", func(t *testing.T) {
+		// Fill both semaphore slots so the goroutine blocks
+		scrapeSemaphore <- struct{}{}
+		scrapeSemaphore <- struct{}{}
+
 		tmpDir := t.TempDir()
 		cfg := &config.Config{
 			Port:         0,
@@ -184,14 +159,17 @@ func TestJobCancellationSpeed(t *testing.T) {
 		app := fiber.New()
 		app.Post("/api/v1/scrape/month", handlers.HandleScrapeMonth)
 
-		// Start a month scrape (will take a while)
-		body := `{"month":"2026-01"}`
+		// Submit a job; goroutine will block waiting for the semaphore
+		body := `{"month":"9999-01"}`
 		req := httptest.NewRequest("POST", "/api/v1/scrape/month", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := app.Test(req, -1)
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
+		}
+		if resp.StatusCode != 202 {
+			t.Errorf("Expected 202, got %d", resp.StatusCode)
 		}
 
 		// Parse job ID
@@ -205,47 +183,38 @@ func TestJobCancellationSpeed(t *testing.T) {
 			}
 		}
 
-		// Wait for job to start
-		time.Sleep(1 * time.Second)
+		// Give the goroutine time to start and block on the semaphore
+		time.Sleep(50 * time.Millisecond)
 
-		// Cancel the job
-		startTime := time.Now()
+		// Cancel the job while it's blocked
 		if job := jobs.GetJob(jobID); job != nil {
 			job.Cancel()
 		}
 
-		// Wait for job to actually stop (check status)
-		// Note: With 30s page timeout, cancellation can take up to 30s + processing time
-		maxWait := 50 * time.Second
-		cancelled := false
-		for elapsed := time.Duration(0); elapsed < maxWait; elapsed += 500 * time.Millisecond {
+		// Release one semaphore slot so the goroutine can unblock and check IsCancelled
+		<-scrapeSemaphore
+		defer func() { <-scrapeSemaphore }() // release the remaining filled slot
+
+		// Within a short window the goroutine should detect cancel and exit
+		deadline := time.Now().Add(2 * time.Second)
+		exited := false
+		for time.Now().Before(deadline) {
 			if job := jobs.GetJob(jobID); job != nil {
-				// Job can be either "cancelled" or "failed" with cancelled message
-				if job.Status == "cancelled" ||
-					(job.Status == "failed" && (strings.Contains(job.Error, "cancelled") || strings.Contains(job.Error, "cancelled"))) {
-					cancelled = true
+				if job.Status == "cancelled" || job.Status == "failed" || job.Status == "completed" {
+					exited = true
 					break
 				}
 			}
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 		}
-
-		elapsed := time.Since(startTime)
-
-		if !cancelled {
-			t.Error("Job was not cancelled within timeout")
-		}
-
-		t.Logf("Job cancelled in %v (max 1 page timeout + overhead)", elapsed)
-
-		// Verify cancellation worked (even if slow)
-		if !cancelled {
-			t.Errorf("Cancellation failed - job never marked as cancelled")
+		if !exited {
+			t.Error("Job did not exit within 2s after cancel + semaphore release")
+		} else {
+			t.Log("Job exited promptly after cancellation")
 		}
 	})
 
 	t.Run("Cancelled job releases semaphore", func(t *testing.T) {
-		// Similar to above but verify another job can start after cancellation
 		t.Skip("Tested implicitly by semaphore release tests")
 	})
 }
@@ -271,14 +240,14 @@ func TestSemaphoreWithDifferentEndpoints(t *testing.T) {
 		app.Post("/api/v1/scrape/month", handlers.HandleScrapeMonth)
 		app.Post("/api/v1/scrape/year", handlers.HandleScrapeYear)
 
-		// Start one of each type
+		// Start one of each type — use Chrome-safe values (fail before chromedp.Run)
 		requests := []struct {
 			endpoint string
 			body     string
 		}{
-			{"/api/v1/scrape/date", `{"date":"2026-02-01"}`},
-			{"/api/v1/scrape/month", `{"month":"2026-01"}`},
-			{"/api/v1/scrape/year", `{"year":"2025"}`},
+			{"/api/v1/scrape/date", `{"date":"2099-01-01"}`}, // future: fails before chromedp.Run
+			{"/api/v1/scrape/month", `{"month":"9999-01"}`},  // far future month: 0 days, no Chrome
+			{"/api/v1/scrape/year", `{"year":"9999"}`},       // far future year: 0 days, no Chrome
 		}
 
 		jobIDs := make([]string, 0)

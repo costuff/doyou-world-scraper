@@ -603,7 +603,7 @@ func TestRemoveDuplicates_WithProgressCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RemoveDuplicates failed: %v", err)
 	}
-	_ = result // no duplicates expected
+	_ = result         // no duplicates expected
 	_ = progressCalled // progress callback may or may not be called for 2 files
 }
 

@@ -91,10 +91,10 @@ func TestExtractBetween(t *testing.T) {
 			expected: "<span>Nested</span>",
 		},
 		{
-			name:  "Real HTML track title extraction",
-			input: `<h1 class="Track_title__rH4bg">Some Track Name</h1>`,
-			start: `<h1 class="Track_title__rH4bg">`,
-			end:   `</h1>`,
+			name:     "Real HTML track title extraction",
+			input:    `<h1 class="Track_title__rH4bg">Some Track Name</h1>`,
+			start:    `<h1 class="Track_title__rH4bg">`,
+			end:      `</h1>`,
 			expected: "Some Track Name",
 		},
 		{

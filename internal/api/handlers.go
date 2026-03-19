@@ -116,7 +116,7 @@ func (h *Handlers) resolveDownloadsDir(requestedDir string) (string, error) {
 			}
 		}
 	}
-	
+
 	// Translate Mac volume paths to Docker mount point
 	// If user provides /Volumes/... path but we're in Docker, use /nas instead
 	if strings.HasPrefix(downloadsDir, "/Volumes/") && fileExists("/nas") {
@@ -640,13 +640,13 @@ func (h *Handlers) HandleClearNASDownloads(c *fiber.Ctx) error {
 	}
 
 	nasDir := req.NASDir
-	
+
 	// Translate Mac volume paths to Docker mount point
 	// If user provides /Volumes/... path but we're in Docker, use /nas instead
 	if strings.HasPrefix(nasDir, "/Volumes/") && fileExists("/nas") {
 		nasDir = "/nas"
 	}
-	
+
 	if nasDir == "" {
 		// Try to auto-detect NAS path
 		if fileExists("/nas") {

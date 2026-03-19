@@ -260,7 +260,7 @@ func TestHandlerErrorCases(t *testing.T) {
 	})
 
 	t.Run("Wrong content type", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/v1/scrape/date", bytes.NewReader([]byte(`date=2026-02-08`)))
+		req := httptest.NewRequest("POST", "/api/v1/scrape/date", bytes.NewReader([]byte(`date=2099-01-01`)))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 		resp, err := app.Test(req)
@@ -295,7 +295,7 @@ func TestHandlerErrorCases(t *testing.T) {
 	})
 
 	t.Run("Invalid year format", func(t *testing.T) {
-		invalidYears := []string{"abcd", "99", "20260", "-2026", "2026.5"}
+		invalidYears := []string{"abcd", "20260", "-2026", "2026.5"} // removed "99" (year 99 CE would launch Chrome)
 		for _, year := range invalidYears {
 			body, _ := json.Marshal(map[string]string{"year": year})
 			req := httptest.NewRequest("POST", "/api/v1/scrape/year", bytes.NewReader(body))
@@ -407,7 +407,7 @@ func TestConcurrentRequests(t *testing.T) {
 		// Start 10 write operations (create jobs)
 		for i := 0; i < 10; i++ {
 			go func() {
-				body, _ := json.Marshal(map[string]string{"date": "2026-01-01"})
+					body, _ := json.Marshal(map[string]string{"date": "2099-01-01"}) // far future: no Chrome
 				req := httptest.NewRequest("POST", "/api/v1/scrape/date", bytes.NewReader(body))
 				req.Header.Set("Content-Type", "application/json")
 

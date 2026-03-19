@@ -215,18 +215,12 @@ cd frontend && npm run dev
 - Run: `go test ./internal/... ./api/...`
 - Coverage: `go test -cover ./internal/... ./api/...`
 - Count tests: `go test -v ./internal/... ./api/... 2>&1 | grep -c "^=== RUN"`
-  - **Current Stats**: 376 test cases, ~63% average coverage
-    - cmd/api: 1 test, 0.0% (main not testable)
-    - internal/api: 51 tests (including analyzed tracks endpoint), 61.1%
-  - internal/config: 18 tests, 96.4%
-  - internal/downloader: 79 tests, 69.7%
-  - internal/jobs: 26 tests (includes extended lifecycle, cancellation, concurrency tests), 58.0%
-  - internal/scraper: 15 tests (including concurrency tests), 60.3%
-  - internal/storage: 77 tests (includes extended utilities tests for filtering, sorting, caching), 60.5%
-  - pkg/logger: 13 tests, 74.1%
-  - **Phase 2 Chrome Fixes**: 9 tests for semaphore limits and job cancellation (all passing)
-  - **NAS Path Resolution**: 10 new tests for auto-detection and error handling (all passing)
-  - **Extended Test Suites**: 28 new tests for job lifecycle, storage utilities, and edge cases
+  - **Current Stats**: 444 tests, ~74% average coverage
+    - internal/api: 80.6% coverage
+    - internal/analyzer: N/A
+    - internal/config: 11 tests, 96.4% coverage
+    - internal/db: N/A
+    - pkg/logger: 13 tests, 74.1% coverage
 
 **When Adding Features:**
 1. Write tests first (TDD approach preferred)

@@ -124,7 +124,7 @@ func TestScrapeDateEndpoint(t *testing.T) {
 	app := setupTestApp()
 
 	payload := map[string]string{
-		"date": "2026-01-27",
+		"date": "2099-01-01", // far future: fails in scraper before chromedp.Run
 	}
 	body, _ := json.Marshal(payload)
 
@@ -475,7 +475,7 @@ func TestScrapeMonthEndpoint(t *testing.T) {
 	app := setupTestApp()
 
 	payload := map[string]string{
-		"month": "2026-01",
+		"month": "9999-01", // far future: no days before today, no Chrome launched
 	}
 	body, _ := json.Marshal(payload)
 
@@ -508,7 +508,7 @@ func TestScrapeYearEndpoint(t *testing.T) {
 	app := setupTestApp()
 
 	payload := map[string]string{
-		"year": "2025",
+		"year": "9999", // far future: no days before today, no Chrome launched
 	}
 	body, _ := json.Marshal(payload)
 
@@ -690,9 +690,9 @@ func TestDownloadAllEndpoint(t *testing.T) {
 func TestGetAnalyzedTracksEndpoint(t *testing.T) {
 	app := setupTestApp()
 
-	// Create test data: MP3 file with companion JSON
-	downloadsDir := "./test_data/downloads"
-	os.MkdirAll(downloadsDir, 0755)
+	// Use a temp dir (not the shared ./test_data/downloads) to avoid races with
+	// background goroutines spawned by TestClearDownloadsEndpoint.
+	downloadsDir := t.TempDir()
 
 	// Create a test MP3 file (minimal valid MP3 header)
 	testMP3Path := filepath.Join(downloadsDir, "test_track.mp3")
@@ -703,7 +703,7 @@ func TestGetAnalyzedTracksEndpoint(t *testing.T) {
 	if err := os.WriteFile(testMP3Path, testMP3Data, 0644); err != nil {
 		t.Fatalf("Failed to create test MP3: %v", err)
 	}
-	defer os.Remove(testMP3Path)
+	// cleanup handled by t.TempDir()
 
 	// Create companion JSON analysis file
 	testJSONPath := filepath.Join(downloadsDir, "test_track.json")
@@ -719,10 +719,10 @@ func TestGetAnalyzedTracksEndpoint(t *testing.T) {
 	if err := os.WriteFile(testJSONPath, jsonData, 0644); err != nil {
 		t.Fatalf("Failed to create test JSON: %v", err)
 	}
-	defer os.Remove(testJSONPath)
+	// t.TempDir() handles cleanup automatically; no need for manual defer os.Remove
 
-	// Test the endpoint
-	req := httptest.NewRequest("GET", "/api/v1/tracks/analyzed", nil)
+	// Use downloads_dir param so the handler reads from the isolated temp dir.
+	req := httptest.NewRequest("GET", "/api/v1/tracks/analyzed?downloads_dir="+downloadsDir, nil)
 	resp, err := app.Test(req, 5000)
 
 	if err != nil {
@@ -747,7 +747,7 @@ func TestGetAnalyzedTracksEndpoint(t *testing.T) {
 
 	// Should have at least 1 track (our test track)
 	if len(tracks) < 1 {
-		t.Error("Expected at least 1 analyzed track")
+		t.Fatal("Expected at least 1 analyzed track")
 	}
 
 	// Check first track structure
