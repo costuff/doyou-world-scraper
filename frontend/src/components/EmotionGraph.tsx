@@ -261,7 +261,7 @@ function stepSimulation(nodes: GraphNode[], poles: Pole[]): boolean {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function EmotionGraph() {
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement | null>(null); // set by startLoop callback ref
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [loading, setLoading]   = useState(true);
@@ -337,26 +337,23 @@ export default function EmotionGraph() {
     return () => { dead = true; };
   }, []);
 
-  // ── Render loop ────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // ── Render loop — callback ref: React calls this with the live element on mount ──
+  const startLoop = useCallback((el: HTMLCanvasElement | null) => {
+    canvasRef.current = el;          // keep ref alive for mouse/wheel handlers
+    cancelAnimationFrame(animRef.current);
+    if (!el) return;
 
-    const frame = () => {
-      // Keep canvas pixel buffer in sync with its CSS layout size every frame.
-      // This is more reliable than a ResizeObserver alone: it self-heals if
-      // the container was 0×0 on mount (flex layout not yet computed) or if
-      // the ResizeObserver callback fired before the canvas was sized.
-      const rect = canvas.getBoundingClientRect();
-      const W = Math.round(rect.width);
-      const H = Math.round(rect.height);
-      if (canvas.width !== W)  canvas.width  = W;
-      if (canvas.height !== H) canvas.height = H;
+    const tick = () => {
+      // Size from parent div — always correct, even on the very first frame
+      const W = el.parentElement?.clientWidth  ?? 0;
+      const H = el.parentElement?.clientHeight ?? 0;
+      if (el.width  !== W) el.width  = W;
+      if (el.height !== H) el.height = H;
 
-      if (W === 0 || H === 0) { animRef.current = requestAnimationFrame(frame); return; }
+      if (W === 0 || H === 0) { animRef.current = requestAnimationFrame(tick); return; }
 
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { animRef.current = requestAnimationFrame(frame); return; }
+      const ctx = el.getContext('2d');
+      if (!ctx) { animRef.current = requestAnimationFrame(tick); return; }
 
       const nodes = nodesRef.current;
       const poles = polesRef.current;
@@ -527,16 +524,15 @@ export default function EmotionGraph() {
       }
 
       ctx.restore();
-      animRef.current = requestAnimationFrame(frame);
+      animRef.current = requestAnimationFrame(tick);
     };
 
-    animRef.current = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(animRef.current);
-  }, []);
+    animRef.current = requestAnimationFrame(tick);
+  }, []); // empty deps — reads only stable refs
 
   // ── Non-passive wheel listener ─────────────────────────────────────────────
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = canvasRef.current; // set synchronously by startLoop callback ref
     if (!canvas) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -708,7 +704,7 @@ export default function EmotionGraph() {
       {/* ── Canvas area ────────────────────────────────────────────────── */}
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
         <canvas
-          ref={canvasRef}
+          ref={startLoop}
           className="absolute inset-0"
           style={{ cursor: 'grab' }}
           onMouseMove={onMouseMove}
