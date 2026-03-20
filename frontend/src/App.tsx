@@ -8,9 +8,10 @@ import { JobsList } from './components/JobsList';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import TrackBrowser from './components/TrackBrowser';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import EmotionGraph from './components/EmotionGraph';
 import { Footer } from './components/Footer';
 
-type View = 'dashboard' | 'tracks' | 'analytics';
+type View = 'dashboard' | 'tracks' | 'analytics' | 'graph';
 
 function App() {
   const { isConnected, jobs } = useWebSocket();
@@ -56,6 +57,16 @@ function App() {
                 >
                   Analytics
                 </button>
+                <button
+                  onClick={() => setCurrentView('graph')}
+                  className={`px-4 py-2 rounded-lg transition ${
+                    currentView === 'graph'
+                      ? 'bg-violet-600 text-white'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-700'
+                  }`}
+                >
+                  Emotion Graph
+                </button>
               </nav>
             </div>
             <ConnectionStatus isConnected={isConnected} />
@@ -64,30 +75,38 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentView === 'dashboard' && (
-          <div className="space-y-8">
-            {/* Stats */}
-            <StatsPanel />
+      {currentView === 'graph' ? (
+        <div style={{ height: 'calc(100vh - 73px)' }}>
+          <EmotionGraph />
+        </div>
+      ) : (
+        <>
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {currentView === 'dashboard' && (
+              <div className="space-y-8">
+                {/* Stats */}
+                <StatsPanel />
 
-            {/* Controls Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <ScrapeControls />
-              <DownloadControls />
-            </div>
+                {/* Controls Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <ScrapeControls />
+                  <DownloadControls />
+                </div>
 
-            {/* Jobs List */}
-            <JobsList jobs={jobs} />
-          </div>
-        )}
+                {/* Jobs List */}
+                <JobsList jobs={jobs} />
+              </div>
+            )}
 
-        {currentView === 'tracks' && <TrackBrowser />}
+            {currentView === 'tracks' && <TrackBrowser />}
 
-        {currentView === 'analytics' && <AnalyticsDashboard />}
-      </main>
+            {currentView === 'analytics' && <AnalyticsDashboard />}
+          </main>
 
-      {/* Footer */}
-      <Footer />
+          {/* Footer */}
+          <Footer />
+        </>
+      )}
       </div>
     </ErrorBoundary>
   );
