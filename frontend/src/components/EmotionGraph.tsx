@@ -705,8 +705,8 @@ export default function EmotionGraph() {
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
         <canvas
           ref={startLoop}
-          className="absolute inset-0"
-          style={{ cursor: 'grab' }}
+          className="absolute inset-0 w-full h-full"
+          style={{ cursor: 'grab', display: 'block' }}
           onMouseMove={onMouseMove}
           onMouseDown={onMouseDown}
           onMouseUp={onMouseUp}
