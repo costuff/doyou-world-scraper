@@ -602,28 +602,28 @@ export default function EmotionGraph() {
 
   // ── UI ─────────────────────────────────────────────────────────────────────
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-full bg-[#080e1a]">
-      <div className="text-center space-y-3">
-        <div className="w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-slate-400">Mapping emotion space…</p>
-        <p className="text-slate-600 text-sm">Fetching tracks &amp; computing positions</p>
-      </div>
-    </div>
-  );
-
-  if (error) return (
-    <div className="flex items-center justify-center h-full bg-[#080e1a]">
-      <div className="text-center">
-        <p className="text-red-400 text-lg mb-2">Graph unavailable</p>
-        <p className="text-slate-500 text-sm">{error}</p>
-        <p className="text-slate-600 text-xs mt-2">Is the analytics API running on port 8080?</p>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="flex h-full bg-[#080e1a] overflow-hidden">
+    <div className="relative flex h-full bg-[#080e1a] overflow-hidden">
+
+      {/* Loading/error overlays — canvas stays mounted so the render loop always starts */}
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#080e1a]">
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-slate-400">Mapping emotion space…</p>
+            <p className="text-slate-600 text-sm">Fetching tracks &amp; computing positions</p>
+          </div>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#080e1a]">
+          <div className="text-center">
+            <p className="text-red-400 text-lg mb-2">Graph unavailable</p>
+            <p className="text-slate-500 text-sm">{error}</p>
+            <p className="text-slate-600 text-xs mt-2">Is the analytics API running on port 8080?</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Left sidebar: emotion filter ───────────────────────────────── */}
       <div className="w-52 bg-[#0d1424] border-r border-slate-800 flex flex-col flex-shrink-0 overflow-y-auto">
