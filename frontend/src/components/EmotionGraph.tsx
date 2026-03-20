@@ -182,7 +182,7 @@ function buildNodes(
   emotionsMap: Map<number, Record<string, number>>,
   poles: Pole[],
 ): GraphNode[] {
-  return tracks.filter(t => emotionsMap.has(t.id)).map(t => {
+  return tracks.filter(t => emotionsMap.has(t.id) && t.features != null).map(t => {
     const emotions = emotionsMap.get(t.id)!;
     const f = t.features;
 
@@ -294,7 +294,7 @@ export default function EmotionGraph() {
     (async () => {
       try {
         const [trRes, emRes] = await Promise.all([
-          axios.get(`${ANALYTICS}/api/v1/tracks`, { params: { status: 'completed', limit: 2000 }, timeout: 15000 }),
+          axios.get(`${ANALYTICS}/api/v1/tracks`, { params: { limit: 2000 }, timeout: 15000 }),
           axios.get(`${ANALYTICS}/api/v1/emotions`, { params: { limit: 2000 }, timeout: 15000 }),
         ]);
         if (dead) return;
