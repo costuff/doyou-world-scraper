@@ -98,16 +98,16 @@ export const apiService = {
         axios.get(url, { params, timeout: timeoutMs });
 
       // Fetch first page to get total count
-      const firstResponse = await axiosWithTimeout(`${ANALYTICS_API_URL}/api/v1/tracks`, { status: 'completed', limit, offset });
+      const firstResponse = await axiosWithTimeout(`${ANALYTICS_API_URL}/api/v1/tracks`, { limit, offset });
 
       if (firstResponse?.data) {
         total = firstResponse.data.total;
-        allTracks.push(...firstResponse.data.tracks);
+        allTracks.push(...(firstResponse.data.tracks ?? []));
         offset += limit;
 
         // Fetch remaining pages
         while (offset < total) {
-          const response = await axiosWithTimeout(`${ANALYTICS_API_URL}/api/v1/tracks`, { status: 'completed', limit, offset });
+          const response = await axiosWithTimeout(`${ANALYTICS_API_URL}/api/v1/tracks`, { limit, offset });
           if (response?.data?.tracks) {
             allTracks.push(...response.data.tracks);
           }
