@@ -337,29 +337,37 @@ export default function EmotionGraph() {
     return () => { dead = true; };
   }, []);
 
-  // ── Size canvas to container ───────────────────────────────────────────────
-  useEffect(() => {
-    const canvas = canvasRef.current, cont = containerRef.current;
-    if (!canvas || !cont) return;
-    const ro = new ResizeObserver(() => { canvas.width = cont.clientWidth; canvas.height = cont.clientHeight; });
-    ro.observe(cont);
-    canvas.width = cont.clientWidth; canvas.height = cont.clientHeight;
-    return () => ro.disconnect();
-  }, []);
-
   // ── Render loop ────────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const frame = () => {
+      // Keep canvas pixel buffer in sync with its CSS layout size every frame.
+      // This is more reliable than a ResizeObserver alone: it self-heals if
+      // the container was 0×0 on mount (flex layout not yet computed) or if
+      // the ResizeObserver callback fired before the canvas was sized.
+      const rect = canvas.getBoundingClientRect();
+      const W = Math.round(rect.width);
+      const H = Math.round(rect.height);
+      if (canvas.width !== W)  canvas.width  = W;
+      if (canvas.height !== H) canvas.height = H;
+
+      if (W === 0 || H === 0) { animRef.current = requestAnimationFrame(frame); return; }
+
       const ctx = canvas.getContext('2d');
       if (!ctx) { animRef.current = requestAnimationFrame(frame); return; }
 
-      const W = canvas.width, H = canvas.height;
-      const t = tf.current;
       const nodes = nodesRef.current;
       const poles = polesRef.current;
+
+      // Auto-centre the world when data first arrives but the transform was
+      // never initialised (e.g. containerRef was null during the fetch).
+      // Read tf.current AFTER the update so the correct value is used this frame.
+      if (tf.current.x === 0 && tf.current.y === 0 && nodes.length > 0) {
+        tf.current = { x: W / 2, y: H / 2, scale: 1 };
+      }
+      const t = tf.current;
 
       if (simActive.current && nodes.length > 0) {
         if (!stepSimulation(nodes, poles)) {
