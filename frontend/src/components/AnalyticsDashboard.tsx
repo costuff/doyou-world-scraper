@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import apiService from '../services/api';
 import type { AnalyzedTrack, AudioAnalysis } from '../types';
+
+const ANALYTICS_API_URL = import.meta.env.VITE_ANALYTICS_API_URL || '/analytics-api';
+
+interface EmotionDistribution {
+  dimension: string;
+  min: number;
+  max: number;
+  avg: number;
+  count: number;
+}
 
 export const AnalyticsDashboard = () => {
   const [tracks, setTracks] = useState<AnalyzedTrack[]>([]);
@@ -9,30 +20,35 @@ export const AnalyticsDashboard = () => {
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
   const [currentTrack, setCurrentTrack] = useState<string | null>(null);
   const [audioElement] = useState(new Audio());
+  const [emotionDistribution, setEmotionDistribution] = useState<EmotionDistribution[]>([]);
 
   const fetchAnalyzedTracks = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getAnalyzedTracks();
-      if (response?.data) {
-        // Analytics service returns { tracks: [...], total }
-        const apiTracks = response.data.tracks || [];
-        console.log(`Loaded ${apiTracks.length} of ${response.data.total} analyzed tracks from analytics service`);
-        
-        // Map the analytics API format to our frontend format
-        // Analytics API has 'features' field, we need 'analysis'
-        const mappedTracks = apiTracks.map((track: any) => ({
-          file_path: track.file_path,
-          file_name: track.file_name,
-          analysis: track.features, // Map 'features' to 'analysis'
-        }));
-        
-        setTracks(mappedTracks);
+      const [tracksResponse, emotionsResponse] = await Promise.allSettled([
+        apiService.getAnalyzedTracks(),
+        axios.get(`${ANALYTICS_API_URL}/api/v1/emotions/distribution`, { timeout: 5000 }),
+      ]);
+
+      if (tracksResponse.status === 'fulfilled' && tracksResponse.value?.data) {
+        const apiTracks = tracksResponse.value.data.tracks || [];
+        console.log(`Loaded ${apiTracks.length} of ${tracksResponse.value.data.total} analyzed tracks`);
+        setTracks(
+          apiTracks.map((track: any) => ({
+            file_path: track.file_path,
+            file_name: track.file_name,
+            analysis: track.features,
+          }))
+        );
         setError(null);
+      } else if (tracksResponse.status === 'rejected') {
+        const err = tracksResponse.reason;
+        setError(err?.message || 'Failed to load analyzed tracks from analytics service');
       }
-    } catch (err: any) {
-      console.error('Failed to fetch analyzed tracks:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load analyzed tracks from analytics service');
+
+      if (emotionsResponse.status === 'fulfilled') {
+        setEmotionDistribution(emotionsResponse.value.data?.distribution || []);
+      }
     } finally {
       setLoading(false);
     }
@@ -40,8 +56,6 @@ export const AnalyticsDashboard = () => {
 
   useEffect(() => {
     fetchAnalyzedTracks();
-    
-    // Cleanup audio on unmount
     return () => {
       audioElement.pause();
       audioElement.src = '';
@@ -173,6 +187,20 @@ export const AnalyticsDashboard = () => {
         <StatCard label="Avg Energy" value={(stats.avgEnergy * 100).toFixed(0) + '%'} />
         <StatCard label="Avg Danceability" value={(stats.avgDanceability * 100).toFixed(0) + '%'} />
       </div>
+
+      {/* Emotion Profile */}
+      {emotionDistribution.length > 0 && (
+        <div className="bg-slate-800 rounded-lg p-6 shadow-lg border border-slate-700">
+          <h3 className="text-xl font-bold text-white mb-1">Emotion Profile</h3>
+          <p className="text-slate-400 text-sm mb-4">
+            Average intensities across {emotionDistribution[0]?.count ?? 0} analyzed tracks
+          </p>
+          <div className="flex flex-col lg:flex-row gap-8 items-center">
+            <EmotionRadar data={emotionDistribution} />
+            <EmotionBars data={emotionDistribution} />
+          </div>
+        </div>
+      )}
 
       {/* Visualizations Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -309,6 +337,70 @@ export const AnalyticsDashboard = () => {
     </div>
   );
 };
+
+// Emotion Charts
+
+const EMOTION_COLORS: Record<string, string> = {
+  euphoria:   '#a78bfa',
+  tension:    '#f87171',
+  melancholy: '#60a5fa',
+  aggression: '#fb923c',
+  serenity:   '#34d399',
+  nostalgia:  '#fbbf24',
+  sensuality: '#f472b6',
+  power:      '#e879f9',
+};
+
+const EmotionRadar = ({ data }: { data: EmotionDistribution[] }) => {
+  const SIZE = 260, CX = 130, CY = 130, R = 100;
+  const n = data.length;
+  if (n === 0) return null;
+
+  const pt = (v: number, i: number) => {
+    const a = (i * 2 * Math.PI) / n - Math.PI / 2;
+    return { x: CX + R * v * Math.cos(a), y: CY + R * v * Math.sin(a) };
+  };
+  const poly = (vals: number[]) =>
+    vals.map((v, i) => pt(v, i)).map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + ' Z';
+
+  return (
+    <div className="flex-shrink-0">
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+        {[0.25, 0.5, 0.75, 1].map(lv => (
+          <path key={lv} d={poly(data.map(() => lv))} fill="none" stroke="#475569" strokeWidth={1} strokeDasharray={lv < 1 ? '3,3' : undefined} />
+        ))}
+        {data.map((_, i) => { const t = pt(1, i); return <line key={i} x1={CX} y1={CY} x2={t.x} y2={t.y} stroke="#475569" strokeWidth={1} />; })}
+        <path d={poly(data.map(d => d.avg))} fill="rgba(139,92,246,0.2)" stroke="#8b5cf6" strokeWidth={2} />
+        {data.map((d, i) => { const p = pt(d.avg, i); return <circle key={i} cx={p.x} cy={p.y} r={5} fill={EMOTION_COLORS[d.dimension] ?? '#8b5cf6'}><title>{d.dimension}: {(d.avg * 100).toFixed(0)}%</title></circle>; })}
+        {data.map((d, i) => { const p = pt(1.3, i); return <text key={i} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fontSize={10} fill="#94a3b8">{d.dimension}</text>; })}
+      </svg>
+    </div>
+  );
+};
+
+const EmotionBars = ({ data }: { data: EmotionDistribution[] }) => (
+  <div className="flex-1 space-y-3 w-full min-w-0">
+    {data.map(d => {
+      const color = EMOTION_COLORS[d.dimension] ?? '#8b5cf6';
+      return (
+        <div key={d.dimension}>
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-slate-300 capitalize font-medium">{d.dimension}</span>
+            <span className="text-slate-400">{(d.avg * 100).toFixed(0)}% avg</span>
+          </div>
+          <div className="relative h-5 bg-slate-700 rounded-full overflow-hidden">
+            <div className="absolute h-full rounded-full opacity-30" style={{ left: `${d.min * 100}%`, width: `${Math.max((d.max - d.min) * 100, 1)}%`, backgroundColor: color }} />
+            <div className="absolute top-0 bottom-0 w-1 rounded-full" style={{ left: `${d.avg * 100}%`, backgroundColor: color }} />
+          </div>
+          <div className="flex justify-between text-xs text-slate-500 mt-0.5">
+            <span>min {(d.min * 100).toFixed(0)}%</span>
+            <span>max {(d.max * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+);
 
 // Helper Components
 
