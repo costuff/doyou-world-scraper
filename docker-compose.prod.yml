@@ -1,3 +1,5 @@
+name: doyou-world-scraper
+
 services:
   api:
     image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-costuff}/doyou-world-scraper-api:latest
