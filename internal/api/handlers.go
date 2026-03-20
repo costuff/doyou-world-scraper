@@ -753,7 +753,11 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 	}
 
 	// Count downloads (with timeout)
-	downloadsDone := make(chan bool, 1)
+	type downloadResult struct {
+		count  int
+		sizeGB float64
+	}
+	downloadsDone := make(chan downloadResult, 1)
 	go func() {
 		var totalMP3s int
 		var downloadsDirSize int64
@@ -768,13 +772,15 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 			}
 			return nil
 		})
-		stats["total_downloads"] = totalMP3s
-		stats["downloads_size_gb"] = float64(downloadsDirSize) / 1024 / 1024 / 1024
-		downloadsDone <- true
+		downloadsDone <- downloadResult{count: totalMP3s, sizeGB: float64(downloadsDirSize) / 1024 / 1024 / 1024}
 	}()
 
 	// Count NAS (with timeout) - only if directory exists
-	nasDone := make(chan bool, 1)
+	type nasResult struct {
+		count  int
+		sizeGB float64
+	}
+	nasDone := make(chan nasResult, 1)
 	go func() {
 		var nasMP3s int
 		var nasDirSize int64
@@ -794,20 +800,22 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 			})
 		}
 
-		stats["nas_downloads"] = nasMP3s
-		stats["nas_size_gb"] = float64(nasDirSize) / 1024 / 1024 / 1024
-		nasDone <- true
+		nasDone <- nasResult{count: nasMP3s, sizeGB: float64(nasDirSize) / 1024 / 1024 / 1024}
 	}()
 
 	// Wait for downloads scan to complete (max 2 seconds)
 	select {
-	case <-downloadsDone:
+	case r := <-downloadsDone:
+		stats["total_downloads"] = r.count
+		stats["downloads_size_gb"] = r.sizeGB
 	case <-time.After(2 * time.Second):
 	}
 
 	// Wait for NAS scan to complete (max 3 seconds)
 	select {
-	case <-nasDone:
+	case r := <-nasDone:
+		stats["nas_downloads"] = r.count
+		stats["nas_size_gb"] = r.sizeGB
 	case <-time.After(3 * time.Second):
 	}
 
