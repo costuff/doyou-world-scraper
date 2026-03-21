@@ -221,6 +221,45 @@ export default function CurateTab() {
     if (!selected) return;
     setSaving(true);
     try {
+      // Ensure every segment of pickedPath exists as a taxonomy node.
+      // Walk path top-down, creating missing nodes so the label appears in the tree.
+      const flatNodes = (nodes: TaxonomyNode[]): TaxonomyNode[] =>
+        nodes.flatMap(n => [n, ...flatNodes(n.children ?? [])]);
+
+      let updatedTaxonomy = taxonomy;
+      let parentId: number | undefined = undefined;
+
+      for (const seg of pickedPath) {
+        const all = flatNodes(updatedTaxonomy);
+        const existing = all.find(n => n.name.toLowerCase() === seg.toLowerCase() &&
+          (parentId == null ? !n.parent_id : n.parent_id === parentId));
+
+        if (existing) {
+          parentId = existing.id;
+        } else {
+          // Create the missing node
+          const newNodeRes = await axios.post<TaxonomyNode>(
+            `${ANALYTICS}/api/v1/taxonomy/nodes`,
+            { parent_id: parentId, name: seg, source: 'user' },
+          );
+          const newNode: TaxonomyNode = newNodeRes.data;
+          // Inject into taxonomy state
+          updatedTaxonomy = parentId == null
+            ? [...updatedTaxonomy, newNode]
+            : (() => {
+                const inject = (nodes: TaxonomyNode[]): TaxonomyNode[] =>
+                  nodes.map(n => n.id === parentId
+                    ? { ...n, children: [...(n.children ?? []), newNode] }
+                    : { ...n, children: n.children ? inject(n.children) : undefined }
+                  );
+                return inject(updatedTaxonomy);
+              })();
+          parentId = newNode.id;
+        }
+      }
+      setTaxonomy(updatedTaxonomy);
+
+      // Save the label
       const { data } = await axios.post<TrackLabel>(
         `${ANALYTICS}/api/v1/tracks/${selected.id}/label`,
         { label_path: pickedPath, curated_by: 'user', notes },
@@ -232,7 +271,7 @@ export default function CurateTab() {
     } finally {
       setSaving(false);
     }
-  }, [selected, pickedPath, notes]);
+  }, [selected, pickedPath, notes, taxonomy]);
 
   // ── Add new taxonomy node ────────────────────────────────────────────────────
   const addNode = useCallback(async () => {
