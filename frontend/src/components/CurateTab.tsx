@@ -30,6 +30,9 @@ interface Track {
     energy?: number;
     valence?: number;
     danceability?: number;
+    acousticness?: number;
+    speechiness?: number;
+    liveness?: number;
     duration_seconds?: number;
   };
 }
@@ -57,6 +60,30 @@ const ZONE_COLORS: Record<string, string> = {
   serenity: '#34d399', sensuality: '#f472b6',
 };
 
+// Mirrors the Go ComputeEmotions formula — returns zones ranked by score.
+function computeZoneSuggestions(f: NonNullable<Track['features']>): { zone: string; score: number }[] {
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  const p = (x: number | undefined, d: number) => x ?? d;
+
+  const energy       = p(f.energy,       0.5);
+  const valence      = p(f.valence,      0.5);
+  const dance        = p(f.danceability, 0.5);
+  const acoustic     = p(f.acousticness, 0.5);
+  const speech       = p(f.speechiness,  0.3);
+  const bpmNorm      = f.bpm != null ? Math.max(0, Math.min(1, (f.bpm - 60) / 140)) : 0.5;
+
+  return [
+    { zone: 'euphoria',   score: clamp(0.4 * valence + 0.3 * dance    + 0.3 * energy) },
+    { zone: 'power',      score: clamp(0.5 * energy  + 0.3 * (1 - acoustic) + 0.2 * bpmNorm) },
+    { zone: 'serenity',   score: clamp(0.5 * (1 - energy) + 0.3 * acoustic + 0.2 * (1 - dance)) },
+    { zone: 'melancholy', score: clamp(0.4 * (1 - valence) + 0.3 * acoustic + 0.3 * (1 - energy)) },
+    { zone: 'nostalgia',  score: clamp(0.4 * acoustic + 0.3 * (1 - valence) + 0.3 * (1 - bpmNorm)) },
+    { zone: 'sensuality', score: clamp(0.4 * (1 - energy) + 0.3 * (1 - speech) + 0.3 * valence) },
+    { zone: 'tension',    score: clamp(0.5 * energy + 0.3 * (1 - valence) + 0.2 * (1 - acoustic)) },
+    { zone: 'aggression', score: clamp(0.5 * energy + 0.3 * speech + 0.2 * (1 - valence)) },
+  ].sort((a, b) => b.score - a.score);
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CurateTab() {
@@ -64,7 +91,6 @@ export default function CurateTab() {
   const [labels, setLabels]         = useState<Record<number, TrackLabel>>({});
   const [taxonomy, setTaxonomy]     = useState<TaxonomyNode[]>([]);
   const [selected, setSelected]     = useState<Track | null>(null);
-  const [curLabel, setCurLabel]     = useState<TrackLabel | null>(null);
   const [pickedPath, setPickedPath] = useState<string[]>([]);
   const [notes, setNotes]           = useState('');
   const [saving, setSaving]         = useState(false);
@@ -106,14 +132,12 @@ export default function CurateTab() {
   // ── Select a track → load its label ─────────────────────────────────────────
   const selectTrack = useCallback(async (track: Track) => {
     setSelected(track);
-    setCurLabel(null);
     setPickedPath([]);
     setNotes('');
 
     // Check cache
     if (labels[track.id]) {
       const lbl = labels[track.id];
-      setCurLabel(lbl);
       setPickedPath(lbl.label_path.length ? lbl.label_path : lbl.auto_label_path);
       return;
     }
@@ -121,12 +145,9 @@ export default function CurateTab() {
     try {
       const { data } = await axios.get<TrackLabel>(`${ANALYTICS}/api/v1/tracks/${track.id}/label`);
       setLabels(prev => ({ ...prev, [track.id]: data }));
-      setCurLabel(data);
       setPickedPath(data.label_path.length ? data.label_path : data.auto_label_path);
     } catch {
       // No label yet — show empty
-      const empty: TrackLabel = { track_id: track.id, label_path: [], auto_label_path: [] };
-      setCurLabel(empty);
       setPickedPath([]);
     }
   }, [labels]);
@@ -141,7 +162,6 @@ export default function CurateTab() {
         { label_path: pickedPath, curated_by: 'user', notes },
       );
       setLabels(prev => ({ ...prev, [selected.id]: data }));
-      setCurLabel(data);
       setSaved(prev => ({ ...prev, [selected.id]: true }));
     } catch (err) {
       alert('Failed to save: ' + (err instanceof Error ? err.message : String(err)));
@@ -401,16 +421,32 @@ export default function CurateTab() {
                 )}
               </div>
 
-              {curLabel?.auto_label_path && curLabel.auto_label_path.length > 0 && (
-                <div className="text-xs text-slate-500 mb-3">
-                  Auto-proposed: <span className="text-slate-300">{curLabel.auto_label_path.join(' / ')}</span>
-                  <button
-                    onClick={() => setPickedPath(curLabel.auto_label_path)}
-                    className="ml-2 text-blue-400 hover:text-blue-300 transition underline underline-offset-2">
-                    accept
-                  </button>
-                </div>
-              )}
+              {selected.features && (() => {
+                const suggestions = computeZoneSuggestions(selected.features);
+                return (
+                  <div className="mb-3">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1.5">Suggestions</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggestions.slice(0, 4).map(({ zone, score }) => (
+                        <button
+                          key={zone}
+                          onClick={() => setPickedPath([zone])}
+                          title={`Score: ${(score * 100).toFixed(0)}%`}
+                          className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition hover:brightness-125"
+                          style={{
+                            background: (ZONE_COLORS[zone] ?? '#475569') + '28',
+                            color: ZONE_COLORS[zone] ?? '#94a3b8',
+                            border: `1px solid ${(ZONE_COLORS[zone] ?? '#475569') + '55'}`,
+                          }}
+                        >
+                          {zone}
+                          <span className="opacity-60 text-[10px] font-mono">{(score * 100).toFixed(0)}%</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="text-xs text-slate-400">Notes (optional)</label>
