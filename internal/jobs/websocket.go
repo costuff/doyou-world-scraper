@@ -73,7 +73,7 @@ func (h *WebSocketHub) run() {
 				clients = append(clients, client)
 			}
 			h.mu.RUnlock()
-			
+
 			// Write to each client with proper synchronization
 			for _, client := range clients {
 				go func(c *WebSocketClient) {

@@ -734,8 +734,8 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 					totalTracks += lineCount - 1
 				}
 				if err := f.Close(); err != nil {
-						logger.Warn(fmt.Sprintf("Failed to close CSV file: %v", err))
-					}
+					logger.Warn(fmt.Sprintf("Failed to close CSV file: %v", err))
+				}
 			}
 
 			// Extract date from filename (tracks-YYYY-MM-DD.csv)

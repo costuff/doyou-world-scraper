@@ -276,7 +276,7 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, j
 		failedPath := filepath.Join(outDir, "failed_songs.csv")
 		failedFile, err := os.Create(failedPath)
 		if err == nil {
-				defer failedFile.Close() //nolint:errcheck
+			defer failedFile.Close() //nolint:errcheck
 			w := csv.NewWriter(failedFile)
 			defer w.Flush()
 			for _, row := range result.FailedSongs {

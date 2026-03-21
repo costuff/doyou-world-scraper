@@ -76,7 +76,7 @@ func TestHandleVersion_WithVersionFiles(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		os.Remove("frontend/VERSION") //nolint:errcheck
-		os.Remove("frontend")        //nolint:errcheck
+		os.Remove("frontend")         //nolint:errcheck
 	})
 
 	h, _, _ := makeHandlers(t)
@@ -540,8 +540,6 @@ func TestHandleAnalyzeAll_WithExistingJSON(t *testing.T) {
 		t.Errorf("expected completed, got %s (err: %s)", j.Status, j.Error)
 	}
 }
-
-
 
 // TestResolveDownloadsDir_NASPath verifies "nas" resolves to NASPath when it exists.
 func TestResolveDownloadsDir_NASPath(t *testing.T) {

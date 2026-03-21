@@ -167,7 +167,7 @@ func MatchDownloadsToCSVs(outDir, downloadsDir string) (*MatchDownloadsResult, e
 		}
 		r := csv.NewReader(csvFile)
 		records, err := r.ReadAll()
-			csvFile.Close() //nolint:errcheck
+		csvFile.Close() //nolint:errcheck
 		if err != nil {
 			continue
 		}
@@ -464,8 +464,8 @@ func scanAllTracks(downloadsDir string) ([]TrackInfo, error) {
 
 		// Try to read ID3 tags
 		if file, err := os.Open(path); err == nil {
-				defer file.Close() //nolint:errcheck
-				if metadata, err := readID3Tags(file); err == nil {
+			defer file.Close() //nolint:errcheck
+			if metadata, err := readID3Tags(file); err == nil {
 				track.Title = metadata.Title
 				track.Artist = metadata.Artist
 				track.Album = metadata.Album
@@ -731,7 +731,7 @@ func MoveDownloadsToNAS(downloadsDir, nasDir string, job *jobs.Job, progressCall
 		if err != nil || srcInfo.Size() != dstInfo.Size() {
 			result.FailedFiles++
 			result.Errors = append(result.Errors, fmt.Sprintf("Verification failed for %s", filename))
-				os.Remove(dstPath) //nolint:errcheck // best-effort cleanup of failed copy
+			os.Remove(dstPath) //nolint:errcheck // best-effort cleanup of failed copy
 			continue
 		}
 
@@ -824,7 +824,7 @@ func ClearDownloads(downloadsDir string, progressCallback func(current, total in
 			continue
 		}
 		result.DeletedFiles++
-		
+
 		// Report progress every 10 files or on last file
 		if progressCallback != nil && (i%10 == 0 || i == len(files)-1) {
 			progressCallback(i+1, len(files), filepath.Base(file))

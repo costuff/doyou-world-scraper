@@ -1,580 +1,681 @@
 /**
- * EmotionGraph — Hierarchical Spatial Emotion Map.
+ * EmotionGraph — interactive force-directed emotion map.
  *
- * Layer 0 (Overview): 8 emotion zones shown as coloured territories.
- *   Each zone is a circle sized by track count. Click to drill in.
+ * Each node = 1 analysed song. 8 emotion poles act as gravity wells.
+ * Songs cluster near the poles they resemble most.
  *
- * Layer 1 (Zone): All tracks in the selected zone rendered as dots,
- *   positioned by their 2-D projection coordinates (proj_x, proj_y).
- *   Click a dot to see track details in the right panel.
- *
- * Navigation: breadcrumb trail at the top + Back button.
+ * Visual layers (back → front):
+ *   1. KNN terrain  — smooth inverse-distance-weighted colour field showing
+ *      which emotion "owns" each area (Voronoi-style soft boundaries).
+ *   2. Nebula glows — radial halos around each pole.
+ *   3. Persistent edges — threads to each song's top-3 cosine-similar neighbours.
+ *   4. Hover edges  — bright dashed lines to the 6 most similar songs on hover.
+ *   5. Song nodes   — coloured by valence, sized by energy, ringed by BPM.
+ *   6. Emotion poles — glowing discs at the boundary of the space.
  *
  * Data sources:
- *   GET /analytics-api/api/v1/projections?limit=10000  — proj_x, proj_y, zone per track
- *   GET /analytics-api/api/v1/tracks/:id               — full track details (on click)
+ *   GET /analytics-api/api/v1/tracks   — all analysed songs + audio features
+ *   GET /analytics-api/api/v1/emotions — per-track emotion scores
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
+import {
+  NEBULA_R, ATTRACT, REPEL, CENTER_PULL, DAMPING,
+  NODE_MIN_R, NODE_MAX_R, KNOWN_PALETTE,
+  clamp01, valenceRgb, cosineSim, buildPoles,
+  type Pole,
+} from './emotionGraphUtils';
 
 const ANALYTICS = import.meta.env.VITE_ANALYTICS_API_URL || '/analytics-api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ProjectionPoint {
-  track_id: number;
-  proj_x: number;   // [-1, 1] arousal axis
-  proj_y: number;   // [-1, 1] valence axis
-  zone: string;
+interface RawFeatures {
+  bpm: number | null;
+  key: string | null;
+  mode: string | null;
+  duration_seconds: number | null;
+  energy: number | null;
+  danceability: number | null;
+  valence: number | null;
+  acousticness: number | null;
+  instrumentalness: number | null;
+  speechiness: number | null;
+  liveness: number | null;
+  melodicness: number | null;
+  loudness_db: number | null;
+  [key: string]: number | string | null;
 }
 
-interface TrackDetail {
+interface RawTrack {
   id: number;
   file_name: string;
   analysis_status: string;
-  audio_features?: {
-    bpm?: number;
-    key?: string;
-    mode?: string;
-    duration_seconds?: number;
-    energy?: number;
-    danceability?: number;
-    valence?: number;
-    acousticness?: number;
-    instrumentalness?: number;
-    speechiness?: number;
-    liveness?: number;
-    melodicness?: number;
-    loudness_db?: number;
-    [key: string]: number | string | undefined;
-  };
-  emotions?: {
-    euphoria?: number;
-    tension?: number;
-    melancholy?: number;
-    aggression?: number;
-    serenity?: number;
-    nostalgia?: number;
-    sensuality?: number;
-    power?: number;
-  };
+  features: RawFeatures;
 }
 
-// ─── Zone layout ─────────────────────────────────────────────────────────────
-
-interface ZoneMeta {
-  color: string;
-  hex: string;
-  label: string;
-  nx: number;   // normalised x in [-1, 1] on the overview canvas (arousal)
-  ny: number;   // normalised y in [-1, 1] on the overview canvas (valence, y-up)
+interface RawEmotions {
+  track_id: number;
+  computed_at: string;
+  [key: string]: number | string;
 }
 
-// Fixed positions create a semantic 2D map:
-//   X-axis = arousal (left=calm, right=energetic)
-//   Y-axis = valence (bottom=negative, top=positive) — canvas y is flipped below
-const ZONES: Record<string, ZoneMeta> = {
-  euphoria:   { color: 'rgba(251,191, 36,0.85)', hex: '#fbbf24', label: 'Euphoria',   nx:  0.68, ny: -0.05 },
-  power:      { color: 'rgba(249,115, 22,0.85)', hex: '#f97316', label: 'Power',      nx:  0.05, ny: -0.72 },
-  aggression: { color: 'rgba(220, 38, 38,0.85)', hex: '#dc2626', label: 'Aggression', nx: -0.62, ny: -0.55 },
-  tension:    { color: 'rgba(239, 68, 68,0.85)', hex: '#ef4444', label: 'Tension',    nx: -0.75, ny:  0.05 },
-  melancholy: { color: 'rgba( 99,102,241,0.85)', hex: '#6366f1', label: 'Melancholy', nx: -0.60, ny:  0.58 },
-  nostalgia:  { color: 'rgba(167,139,250,0.85)', hex: '#a78bfa', label: 'Nostalgia',  nx:  0.05, ny:  0.72 },
-  serenity:   { color: 'rgba( 52,211,153,0.85)', hex: '#34d399', label: 'Serenity',   nx:  0.65, ny:  0.55 },
-  sensuality: { color: 'rgba(244,114,182,0.85)', hex: '#f472b6', label: 'Sensuality', nx:  0.72, ny: -0.40 },
-};
-
-const ZONE_NAMES = Object.keys(ZONES);
-
-// ─── Canvas helpers ───────────────────────────────────────────────────────────
-
-function toCanvas(nx: number, ny: number, cx: number, cy: number, radius: number) {
-  return { x: cx + nx * radius, y: cy + ny * radius };
+interface GraphNode {
+  id: number;
+  name: string;
+  shortName: string;
+  features: RawFeatures;
+  emotions: Record<string, number>;
+  x: number; vx: number;
+  y: number; vy: number;
+  radius: number;
+  colorRgb: [number, number, number];
+  bpmNorm: number;
 }
 
-function drawZoneCircle(
+interface Edge {
+  a: GraphNode;
+  b: GraphNode;
+  weight: number;
+}
+
+// ─── drawRoundRect ────────────────────────────────────────────────────────────
+
+function drawRoundRect(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, r: number,
-  meta: ZoneMeta, label: string, count: number,
-  hovered: boolean,
+  x: number, y: number, w: number, h: number, r: number,
 ) {
   ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y); ctx.arcTo(x+w, y,   x+w, y+r,   r);
+  ctx.lineTo(x + w, y + h - r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x + r, y + h); ctx.arcTo(x, y+h, x, y+h-r, r);
+  ctx.lineTo(x, y + r); ctx.arcTo(x, y, x+r, y, r);
+  ctx.closePath();
+}
 
-  const grd = ctx.createRadialGradient(x - r * 0.2, y - r * 0.2, r * 0.1, x, y, r);
-  grd.addColorStop(0, meta.color.replace('0.85', '0.95'));
-  grd.addColorStop(1, meta.color.replace('0.85', '0.4'));
-  ctx.fillStyle = grd;
-  ctx.fill();
+// ─── Build graph nodes ────────────────────────────────────────────────────────
 
-  ctx.strokeStyle = hovered ? '#fff' : 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = hovered ? 2.5 : 1;
-  ctx.stroke();
+function buildNodes(
+  tracks: RawTrack[],
+  emotionsMap: Map<number, Record<string, number>>,
+  poles: Pole[],
+): GraphNode[] {
+  return tracks.filter(t => emotionsMap.has(t.id) && t.features != null).map(t => {
+    const emotions = emotionsMap.get(t.id)!;
+    const f = t.features;
 
-  ctx.fillStyle = '#fff';
-  ctx.font = `bold ${Math.max(10, Math.min(16, r * 0.28))}px Inter,sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, x, y - 6);
+    let sx = 0, sy = 0, tw = 0;
+    poles.forEach(p => { const w = emotions[p.name] ?? 0; sx += p.x * w; sy += p.y * w; tw += w; });
+    const ix = tw > 0 ? sx / tw : 0;
+    const iy = tw > 0 ? sy / tw : 0;
 
-  ctx.font = `${Math.max(9, Math.min(13, r * 0.22))}px Inter,sans-serif`;
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillText(`${count.toLocaleString()} tracks`, x, y + 12);
+    const raw = t.file_name;
+    const clean = raw.replace(/\s*\[[\w-]+\](\.[^.]+)?$/, '').replace(/\.[^.]+$/, '').trim() || raw;
+    const shortName = clean.length > 36 ? clean.slice(0, 35) + '\u2026' : clean;
+
+    const energy  = f.energy  ?? 0.5;
+    const valence = f.valence ?? 0.5;
+    const bpmNorm = f.bpm != null ? clamp01(f.bpm / 200) : 0.5;
+
+    return {
+      id: t.id,
+      name: raw,
+      shortName,
+      features: f,
+      emotions,
+      x:  ix + (Math.random() - 0.5) * 60,
+      y:  iy + (Math.random() - 0.5) * 60,
+      vx: 0, vy: 0,
+      radius: NODE_MIN_R + energy * (NODE_MAX_R - NODE_MIN_R),
+      colorRgb: valenceRgb(valence),
+      bpmNorm,
+    };
+  });
+}
+
+// ─── Physics step ─────────────────────────────────────────────────────────────
+
+function stepSimulation(nodes: GraphNode[], poles: Pole[]): boolean {
+  let totalKE = 0;
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    let fx = 0, fy = 0;
+
+    for (const p of poles) {
+      const w = n.emotions[p.name] ?? 0;
+      if (w < 0.01) continue;
+      fx += (p.x - n.x) * w * ATTRACT;
+      fy += (p.y - n.y) * w * ATTRACT;
+    }
+
+    for (let j = i + 1; j < nodes.length; j++) {
+      const m = nodes[j];
+      const dx = n.x - m.x, dy = n.y - m.y;
+      const d2 = dx * dx + dy * dy + 1;
+      const d  = Math.sqrt(d2);
+      const minD = n.radius + m.radius + 10;
+      if (d < minD * 3) {
+        const f = REPEL / d2;
+        const nx = dx / d, ny = dy / d;
+        fx += nx * f;   fy += ny * f;
+        m.vx -= nx * f; m.vy -= ny * f;
+      }
+    }
+
+    fx -= n.x * CENTER_PULL;
+    fy -= n.y * CENTER_PULL;
+
+    n.vx = (n.vx + fx) * DAMPING;
+    n.vy = (n.vy + fy) * DAMPING;
+    n.x += n.vx;
+    n.y += n.vy;
+    totalKE += Math.abs(n.vx) + Math.abs(n.vy);
+  }
+  return totalKE / Math.max(1, nodes.length) > 0.08;
+}
+
+// ─── Persistent similarity edges ──────────────────────────────────────────────
+
+const EDGE_TOP_K = 3;
+
+function buildEdges(nodes: GraphNode[], dims: string[]): Edge[] {
+  const edges: Edge[] = [];
+  const seen = new Set<string>();
+  for (const node of nodes) {
+    const sims = nodes
+      .filter(n => n !== node)
+      .map(n => ({ n, s: cosineSim(node.emotions, n.emotions, dims) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, EDGE_TOP_K);
+    for (const { n, s } of sims) {
+      const key = [Math.min(node.id, n.id), Math.max(node.id, n.id)].join('-');
+      if (!seen.has(key)) { seen.add(key); edges.push({ a: node, b: n, weight: s }); }
+    }
+  }
+  return edges;
+}
+
+// ─── KNN terrain canvas ───────────────────────────────────────────────────────
+// Pre-renders a soft colour blend via inverse-distance weighting across poles.
+// Each pixel = weighted mean of pole colours, weight = 1 / d^2.2
+// Gives a smooth Voronoi-like "emotion territory" background.
+
+const TERRAIN_PIXEL = 256;
+const TERRAIN_WORLD = 700;  // half-extent; poles sit at r≈310
+
+function buildTerrain(poles: Pole[]): HTMLCanvasElement {
+  const offscreen = document.createElement('canvas');
+  offscreen.width = offscreen.height = TERRAIN_PIXEL;
+  const ctx = offscreen.getContext('2d')!;
+  const imgData = ctx.createImageData(TERRAIN_PIXEL, TERRAIN_PIXEL);
+  const data = imgData.data;
+  for (let py = 0; py < TERRAIN_PIXEL; py++) {
+    for (let px = 0; px < TERRAIN_PIXEL; px++) {
+      const wx = ((px / TERRAIN_PIXEL) - 0.5) * TERRAIN_WORLD * 2;
+      const wy = ((py / TERRAIN_PIXEL) - 0.5) * TERRAIN_WORLD * 2;
+      let totalW = 0, r = 0, g = 0, b = 0;
+      for (const p of poles) {
+        const dx = wx - p.x, dy = wy - p.y;
+        const w  = 1 / (Math.pow(Math.sqrt(dx*dx + dy*dy), 2.2) + 15);
+        totalW += w; r += p.rgb[0] * w; g += p.rgb[1] * w; b += p.rgb[2] * w;
+      }
+      const idx = (py * TERRAIN_PIXEL + px) * 4;
+      data[idx] = r / totalW; data[idx+1] = g / totalW;
+      data[idx+2] = b / totalW; data[idx+3] = 30;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return offscreen;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type Layer = 'overview' | 'zone';
-
 export default function EmotionGraph() {
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const animRef      = useRef<number>(0);
 
-  const [loading, setLoading]          = useState(true);
-  const [error, setError]              = useState<string | null>(null);
-  const [layer, setLayer]              = useState<Layer>('overview');
-  const [activeZone, setActiveZone]    = useState<string | null>(null);
-  const [selectedTrack, setSelected]   = useState<TrackDetail | null>(null);
-  const [loadingDetail, setLoadingDet] = useState(false);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState<string | null>(null);
+  const [nodeCount, setCount]     = useState(0);
+  const [selected, setSelected]   = useState<GraphNode | null>(null);
+  const [filterEmotion, setFE]    = useState<string | null>(null);
+  const [threshold, setThresh]    = useState(0.5);
+  const [settled, setSettled]     = useState(false);
+  const [showEdges, setShowEdges] = useState(true);
 
-  const projectionsRef  = useRef<ProjectionPoint[]>([]);
-  const hoveredZoneRef  = useRef<string | null>(null);
-  const hoveredDotRef   = useRef<number | null>(null);
+  const nodesRef    = useRef<GraphNode[]>([]);
+  const polesRef    = useRef<Pole[]>([]);
+  const edgesRef    = useRef<Edge[]>([]);
+  const terrainRef  = useRef<HTMLCanvasElement | null>(null);
+  const tf          = useRef({ x: 0, y: 0, scale: 1 });
+  const hoveredRef  = useRef<GraphNode | null>(null);
+  const selectedRef = useRef<GraphNode | null>(null);
+  const filterRef   = useRef<{ emotion: string | null; threshold: number }>({ emotion: null, threshold: 0.5 });
+  const dimsRef     = useRef<string[]>([]);
+  const showEdgesRef= useRef(true);
+  const simActive   = useRef(true);
+  const animRef     = useRef(0);
+  const drag        = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
-  // ── Fetch projections ───────────────────────────────────────────────────────
+  useEffect(() => { filterRef.current   = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
+  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  useEffect(() => { showEdgesRef.current = showEdges; }, [showEdges]);
+
+  // ── Fetch data ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    let cancelled = false;
-    axios.get(`${ANALYTICS}/api/v1/projections?limit=10000`).then(({ data }) => {
-      if (!cancelled) { projectionsRef.current = data.projections ?? []; setLoading(false); }
-    }).catch(err => {
-      if (!cancelled) { setError(err instanceof Error ? err.message : 'Failed to load'); setLoading(false); }
-    });
-    return () => { cancelled = true; };
+    let dead = false;
+    (async () => {
+      try {
+        const [trRes, emRes] = await Promise.all([
+          axios.get(`${ANALYTICS}/api/v1/tracks`,   { params: { limit: 5000 }, timeout: 20000 }),
+          axios.get(`${ANALYTICS}/api/v1/emotions`,  { params: { limit: 5000 }, timeout: 20000 }),
+        ]);
+        if (dead) return;
+        const tracks: RawTrack[]   = trRes.data?.tracks   ?? [];
+        const rawEm: RawEmotions[] = emRes.data?.emotions ?? [];
+        const emotionsMap = new Map<number, Record<string, number>>();
+        const dims = new Set<string>();
+        rawEm.forEach(e => {
+          const m: Record<string, number> = {};
+          Object.entries(e).forEach(([k, v]) => {
+            if (k !== 'track_id' && k !== 'computed_at' && typeof v === 'number') { m[k] = v; dims.add(k); }
+          });
+          emotionsMap.set(e.track_id as number, m);
+        });
+        const keys = dims.size > 0 ? [...dims] : Object.keys(KNOWN_PALETTE);
+        dimsRef.current = keys;
+        const poles = buildPoles(keys);
+        const nodes = buildNodes(tracks, emotionsMap, poles);
+        polesRef.current   = poles;
+        nodesRef.current   = nodes;
+        edgesRef.current   = buildEdges(nodes, keys);
+        terrainRef.current = buildTerrain(poles);
+        simActive.current  = true;
+        const cont = containerRef.current;
+        if (cont) tf.current = { x: cont.clientWidth / 2, y: cont.clientHeight / 2, scale: 1 };
+        setCount(nodes.length);
+        setError(null);
+      } catch (e: unknown) {
+        if (!dead) setError(e instanceof Error ? e.message : 'Failed to load graph data');
+      } finally {
+        if (!dead) setLoading(false);
+      }
+    })();
+    return () => { dead = true; };
   }, []);
 
-  // ── Fetch track detail on click ─────────────────────────────────────────────
-  const fetchTrack = useCallback(async (id: number) => {
-    setLoadingDet(true);
-    try {
-      const { data } = await axios.get(`${ANALYTICS}/api/v1/tracks/${id}`);
-      setSelected(data);
-    } catch { setSelected(null); }
-    finally { setLoadingDet(false); }
+  // ── Render loop ─────────────────────────────────────────────────────────────
+  const startLoop = useCallback((el: HTMLCanvasElement | null) => {
+    canvasRef.current = el;
+    cancelAnimationFrame(animRef.current);
+    if (!el) return;
+
+    const tick = () => {
+      const W = el.parentElement?.clientWidth  ?? 0;
+      const H = el.parentElement?.clientHeight ?? 0;
+      if (el.width !== W) el.width = W;
+      if (el.height !== H) el.height = H;
+      if (W === 0 || H === 0) { animRef.current = requestAnimationFrame(tick); return; }
+      const ctx = el.getContext('2d');
+      if (!ctx) { animRef.current = requestAnimationFrame(tick); return; }
+
+      const nodes  = nodesRef.current;
+      const poles  = polesRef.current;
+      const edges  = edgesRef.current;
+
+      if (tf.current.x === 0 && tf.current.y === 0 && nodes.length > 0) {
+        tf.current = { x: W / 2, y: H / 2, scale: 1 };
+      }
+      const t = tf.current;
+
+      if (simActive.current && nodes.length > 0) {
+        if (!stepSimulation(nodes, poles)) { simActive.current = false; setSettled(true); }
+      }
+
+      // Background
+      ctx.fillStyle = '#080e1a';
+      ctx.fillRect(0, 0, W, H);
+      const bgGrd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.min(W,H)*0.75);
+      bgGrd.addColorStop(0, 'rgba(25,35,65,0.6)');
+      bgGrd.addColorStop(1, 'rgba(8,14,26,0)');
+      ctx.fillStyle = bgGrd;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.translate(t.x, t.y);
+      ctx.scale(t.scale, t.scale);
+
+      // Layer 1: KNN terrain
+      const terrain = terrainRef.current;
+      if (terrain) ctx.drawImage(terrain, -TERRAIN_WORLD, -TERRAIN_WORLD, TERRAIN_WORLD*2, TERRAIN_WORLD*2);
+
+      // Layer 2: Nebula glows
+      for (const p of poles) {
+        const [r, g, b] = p.rgb;
+        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, NEBULA_R);
+        grd.addColorStop(0,    `rgba(${r},${g},${b},0.11)`);
+        grd.addColorStop(0.45, `rgba(${r},${g},${b},0.04)`);
+        grd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(p.x, p.y, NEBULA_R, 0, Math.PI*2); ctx.fill();
+      }
+
+      const hov  = hoveredRef.current;
+      const sel  = selectedRef.current;
+      const flt  = filterRef.current;
+      const dims = dimsRef.current;
+
+      // Layer 3: Persistent similarity edges
+      if (showEdgesRef.current && edges.length > 0) {
+        ctx.setLineDash([]);
+        ctx.lineWidth = 0.8;
+        for (const edge of edges) {
+          ctx.strokeStyle = `rgba(148,163,184,${(edge.weight * 0.18).toFixed(3)})`;
+          ctx.beginPath(); ctx.moveTo(edge.a.x, edge.a.y); ctx.lineTo(edge.b.x, edge.b.y); ctx.stroke();
+        }
+      }
+
+      // Layer 4: Hover similarity threads (bright dashed, top-6)
+      if (hov && nodes.length > 1) {
+        const sims = nodes
+          .filter(n => n !== hov)
+          .map(n => ({ n, s: cosineSim(hov.emotions, n.emotions, dims) }))
+          .sort((a, b) => b.s - a.s).slice(0, 6);
+        ctx.setLineDash([4, 6]); ctx.lineWidth = 1.2;
+        for (const { n, s } of sims) {
+          ctx.strokeStyle = `rgba(148,163,184,${(s * 0.8).toFixed(2)})`;
+          ctx.beginPath(); ctx.moveTo(hov.x, hov.y); ctx.lineTo(n.x, n.y); ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
+
+      // Layer 5: Song nodes
+      for (const node of nodes) {
+        const isHov  = node === hov;
+        const isSel  = node === sel;
+        const emVal  = flt.emotion ? (node.emotions[flt.emotion] ?? 0) : 1;
+        const dimmed = flt.emotion !== null && emVal < flt.threshold;
+        const [r, g, b] = node.colorRgb;
+        const radius = node.radius + (isHov || isSel ? 3 : 0);
+        const glow   = (node.features.energy ?? 0.5) * 20;
+
+        ctx.save();
+        ctx.globalAlpha = dimmed ? 0.08 : 1;
+
+        if (!dimmed && node.bpmNorm > 0.38) {
+          ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 3;
+          ctx.strokeStyle = `rgba(${r},${g},${b},${(node.bpmNorm*0.7).toFixed(2)})`; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(node.x, node.y, radius+5, 0, Math.PI*2); ctx.stroke();
+        }
+
+        ctx.shadowColor = `rgb(${r},${g},${b})`;
+        ctx.shadowBlur  = dimmed ? 0 : (isHov || isSel ? glow*2.2 : glow);
+        ctx.fillStyle   = `rgb(${r},${g},${b})`;
+        ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI*2); ctx.fill();
+
+        if (isSel) { ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); }
+
+        if (!dimmed) {
+          ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.22)';
+          ctx.beginPath(); ctx.arc(node.x - radius*0.28, node.y - radius*0.3, radius*0.4, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // Layer 6: Emotion poles
+      for (const p of poles) {
+        const [r, g, b] = p.rgb;
+        ctx.save();
+        ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 30, 0, Math.PI*2); ctx.stroke();
+        ctx.shadowColor = p.color; ctx.shadowBlur = 35; ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 20, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+        ctx.font = 'bold 11px system-ui,sans-serif'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#e2e8f0'; ctx.shadowBlur = 0;
+        ctx.fillText(p.name.charAt(0).toUpperCase() + p.name.slice(1), p.x, p.y + 40);
+      }
+
+      // Hover tooltip
+      if (hov) {
+        ctx.font = '12px system-ui,sans-serif';
+        const tw = ctx.measureText(hov.shortName).width, pad = 8, bh = 22, bw = tw + pad*2;
+        const bx = hov.x - bw/2, by = hov.y - hov.radius - bh - 8;
+        ctx.fillStyle = 'rgba(8,14,26,0.9)'; drawRoundRect(ctx, bx, by, bw, bh, 5); ctx.fill();
+        ctx.fillStyle = '#f1f5f9'; ctx.textAlign = 'center'; ctx.fillText(hov.shortName, hov.x, by + 15);
+      }
+
+      ctx.restore();
+      animRef.current = requestAnimationFrame(tick);
+    };
+    animRef.current = requestAnimationFrame(tick);
   }, []);
 
-  // ── Canvas rendering + mouse events ─────────────────────────────────────────
+  // ── Non-passive wheel ──────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || loading) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-
-    function resize() {
-      if (!canvas || !containerRef.current) return;
-      const { width, height } = containerRef.current.getBoundingClientRect();
-      canvas.width  = width  * dpr;
-      canvas.height = height * dpr;
-      canvas.style.width  = `${width}px`;
-      canvas.style.height = `${height}px`;
-      ctx!.scale(dpr, dpr);
-    }
-    resize();
-    const ro = new ResizeObserver(resize);
-    if (containerRef.current) ro.observe(containerRef.current);
-
-    const projections = projectionsRef.current;
-    const zoneCounts: Record<string, number> = {};
-    ZONE_NAMES.forEach(z => { zoneCounts[z] = 0; });
-    projections.forEach(p => { if (p.zone in zoneCounts) zoneCounts[p.zone]++; });
-    const maxCount = Math.max(1, ...Object.values(zoneCounts));
-
-    // ── Draw overview ───────────────────────────────────────────────────────────
-    function drawOverview() {
-      if (!ctx || !canvas) return;
-      const W = canvas.width / dpr, H = canvas.height / dpr;
-      const cx = W / 2, cy = H / 2;
-      const mapRadius = Math.min(W, H) * 0.42;
-
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = '#0f1729';
-      ctx.fillRect(0, 0, W, H);
-
-      // Axis guides
-      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(cx - mapRadius, cy); ctx.lineTo(cx + mapRadius, cy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx, cy - mapRadius); ctx.lineTo(cx, cy + mapRadius); ctx.stroke();
-
-      ctx.font = '11px Inter,sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.textAlign = 'left';  ctx.fillText('← Calm',       cx - mapRadius + 4,  cy - 7);
-      ctx.textAlign = 'right'; ctx.fillText('Energetic →',  cx + mapRadius - 4,  cy - 7);
-      ctx.textAlign = 'center';
-      ctx.fillText('Positive ↑', cx, cy - mapRadius + 14);
-      ctx.fillText('↓ Negative', cx, cy + mapRadius - 4);
-
-      const zoneOrder = [...ZONE_NAMES].sort((a, b) => zoneCounts[b] - zoneCounts[a]);
-      for (const zone of zoneOrder.reverse()) {
-        const meta = ZONES[zone];
-        const count = zoneCounts[zone];
-        const minR = 46, maxR = Math.min(mapRadius * 0.38, 108);
-        const r = minR + (count / maxCount) * (maxR - minR);
-        const { x, y } = toCanvas(meta.nx, meta.ny, cx, cy, mapRadius);
-        drawZoneCircle(ctx, x, y, r, meta, meta.label, count, hoveredZoneRef.current === zone);
-      }
-    }
-
-    // ── Draw zone layer ─────────────────────────────────────────────────────────
-    function drawZoneView(zone: string) {
-      if (!ctx || !canvas) return;
-      const W = canvas.width / dpr, H = canvas.height / dpr;
-      const meta = ZONES[zone];
-      if (!meta) return;
-
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = '#0f1729';
-      ctx.fillRect(0, 0, W, H);
-
-      const zoneTracks = projections.filter(p => p.zone === zone);
-      if (zoneTracks.length === 0) {
-        ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ctx.font = '15px Inter,sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('No tracks in this zone yet', W / 2, H / 2);
-        return;
-      }
-
-      let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
-      for (const p of zoneTracks) {
-        if (p.proj_x < xMin) xMin = p.proj_x; if (p.proj_x > xMax) xMax = p.proj_x;
-        if (p.proj_y < yMin) yMin = p.proj_y; if (p.proj_y > yMax) yMax = p.proj_y;
-      }
-      const padX = Math.max(0.05, (xMax - xMin) * 0.12);
-      const padY = Math.max(0.05, (yMax - yMin) * 0.12);
-      xMin -= padX; xMax += padX; yMin -= padY; yMax += padY;
-      const xRange = xMax - xMin || 1, yRange = yMax - yMin || 1;
-      const margin = 52;
-      const mapW = W - margin * 2, mapH = H - margin * 2;
-
-      const toCV = (p: ProjectionPoint) => ({
-        cx: margin + ((p.proj_x - xMin) / xRange) * mapW,
-        cy: margin + ((p.proj_y - yMin) / yRange) * mapH,
-      });
-
-      // Zone tone background
-      ctx.fillStyle = meta.color.replace('0.85', '0.06');
-      ctx.fillRect(margin, margin, mapW, mapH);
-
-      for (const p of zoneTracks) {
-        const { cx: px, cy: py } = toCV(p);
-        const isHov  = hoveredDotRef.current  === p.track_id;
-        const isSel  = selectedTrack?.id      === p.track_id;
-        const r = isHov || isSel ? 7 : 4;
-
-        if (isSel) {
-          ctx.beginPath(); ctx.arc(px, py, r + 5, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fill();
-        }
-        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.fillStyle = isHov || isSel ? '#fff' : meta.hex;
-        ctx.globalAlpha = isHov || isSel ? 1 : 0.65;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-
-      // Hovered dot tooltip
-      if (hoveredDotRef.current !== null) {
-        const hp = zoneTracks.find(p => p.track_id === hoveredDotRef.current);
-        if (hp) {
-          const { cx: px, cy: py } = toCV(hp);
-          const tip = `Track #${hp.track_id}`;
-          ctx.font = '11px Inter,sans-serif';
-          const tw = ctx.measureText(tip).width + 12;
-          const tx = Math.min(W - tw - 4, Math.max(4, px - tw / 2));
-          const ty = py - 28;
-          ctx.fillStyle = 'rgba(0,0,0,0.8)';
-          ctx.beginPath();
-          ctx.roundRect?.(tx, ty, tw, 20, 4);
-          ctx.fill();
-          ctx.fillStyle = '#e2e8f0'; ctx.textAlign = 'left';
-          ctx.fillText(tip, tx + 6, ty + 14);
-        }
-      }
-    }
-
-    function draw() {
-      if (layer === 'overview') drawOverview();
-      else if (activeZone) drawZoneView(activeZone);
-      animRef.current = requestAnimationFrame(draw);
-    }
-    animRef.current = requestAnimationFrame(draw);
-
-    // ── Mouse events ────────────────────────────────────────────────────────────
-    function getXY(e: MouseEvent) {
-      const rect = canvas!.getBoundingClientRect();
-      return { mx: e.clientX - rect.left, my: e.clientY - rect.top };
-    }
-
-    function handleMouseMove(e: MouseEvent) {
-      const { mx, my } = getXY(e);
-      const W = canvas!.width / dpr, H = canvas!.height / dpr;
-
-      if (layer === 'overview') {
-        const cx = W / 2, cy = H / 2;
-        const mapRadius = Math.min(W, H) * 0.42;
-        let hit: string | null = null;
-        for (const zone of ZONE_NAMES) {
-          const meta = ZONES[zone];
-          const { x, y } = toCanvas(meta.nx, meta.ny, cx, cy, mapRadius);
-          const count = zoneCounts[zone];
-          const minR = 46, maxR = Math.min(mapRadius * 0.38, 108);
-          const r = minR + (count / maxCount) * (maxR - minR);
-          if ((mx - x) ** 2 + (my - y) ** 2 < r * r) { hit = zone; break; }
-        }
-        if (hoveredZoneRef.current !== hit) {
-          hoveredZoneRef.current = hit;
-          canvas!.style.cursor = hit ? 'pointer' : 'default';
-        }
-      } else if (activeZone) {
-        const zoneTracks = projections.filter(p => p.zone === activeZone);
-        let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
-        zoneTracks.forEach(p => {
-          if (p.proj_x < xMin) xMin = p.proj_x; if (p.proj_x > xMax) xMax = p.proj_x;
-          if (p.proj_y < yMin) yMin = p.proj_y; if (p.proj_y > yMax) yMax = p.proj_y;
-        });
-        const padX = Math.max(0.05, (xMax - xMin) * 0.12);
-        const padY = Math.max(0.05, (yMax - yMin) * 0.12);
-        xMin -= padX; xMax += padX; yMin -= padY; yMax += padY;
-        const xRange = xMax - xMin || 1, yRange = yMax - yMin || 1;
-        const margin = 52, mapW = W - margin * 2, mapH = H - margin * 2;
-        let hit: number | null = null;
-        const PICK = 10;
-        for (const p of zoneTracks) {
-          const px = margin + ((p.proj_x - xMin) / xRange) * mapW;
-          const py = margin + ((p.proj_y - yMin) / yRange) * mapH;
-          if ((mx - px) ** 2 + (my - py) ** 2 < PICK * PICK) { hit = p.track_id; break; }
-        }
-        if (hoveredDotRef.current !== hit) {
-          hoveredDotRef.current = hit;
-          canvas!.style.cursor = hit ? 'pointer' : 'default';
-        }
-      }
-    }
-
-    function handleClick(e: MouseEvent) {
-      const { mx, my } = getXY(e);
-      const W = canvas!.width / dpr, H = canvas!.height / dpr;
-
-      if (layer === 'overview') {
-        const cx = W / 2, cy = H / 2;
-        const mapRadius = Math.min(W, H) * 0.42;
-        for (const zone of ZONE_NAMES) {
-          const meta = ZONES[zone];
-          const { x, y } = toCanvas(meta.nx, meta.ny, cx, cy, mapRadius);
-          const count = zoneCounts[zone];
-          const minR = 46, maxR = Math.min(mapRadius * 0.38, 108);
-          const r = minR + (count / maxCount) * (maxR - minR);
-          if ((mx - x) ** 2 + (my - y) ** 2 < r * r) {
-            setActiveZone(zone); setLayer('zone'); setSelected(null); hoveredDotRef.current = null;
-            return;
-          }
-        }
-      } else if (activeZone) {
-        const zoneTracks = projections.filter(p => p.zone === activeZone);
-        let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
-        zoneTracks.forEach(p => {
-          if (p.proj_x < xMin) xMin = p.proj_x; if (p.proj_x > xMax) xMax = p.proj_x;
-          if (p.proj_y < yMin) yMin = p.proj_y; if (p.proj_y > yMax) yMax = p.proj_y;
-        });
-        const padX = Math.max(0.05, (xMax - xMin) * 0.12);
-        const padY = Math.max(0.05, (yMax - yMin) * 0.12);
-        xMin -= padX; xMax += padX; yMin -= padY; yMax += padY;
-        const xRange = xMax - xMin || 1, yRange = yMax - yMin || 1;
-        const margin = 52, mapW = W - margin * 2, mapH = H - margin * 2;
-        const PICK = 10;
-        for (const p of zoneTracks) {
-          const px = margin + ((p.proj_x - xMin) / xRange) * mapW;
-          const py = margin + ((p.proj_y - yMin) / yRange) * mapH;
-          if ((mx - px) ** 2 + (my - py) ** 2 < PICK * PICK) { fetchTrack(p.track_id); return; }
-        }
-        setSelected(null);
-      }
-    }
-
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('click', handleClick);
-    return () => {
-      cancelAnimationFrame(animRef.current);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('click', handleClick);
-      ro.disconnect();
+    if (!canvas) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.12 : 0.9, t = tf.current;
+      const ns = Math.max(0.06, Math.min(14, t.scale * factor));
+      tf.current = { scale: ns, x: mx - (mx - t.x)*(ns/t.scale), y: my - (my - t.y)*(ns/t.scale) };
     };
-  }, [loading, layer, activeZone, selectedTrack, fetchTrack]);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, []);
 
-  const zoneMeta = activeZone ? ZONES[activeZone] : null;
-  const zoneTrackCount = activeZone
-    ? projectionsRef.current.filter(p => p.zone === activeZone).length
-    : 0;
+  // ── Interaction ────────────────────────────────────────────────────────────
+  const toWorld = useCallback((cx: number, cy: number) => {
+    const r = canvasRef.current!.getBoundingClientRect(), t = tf.current;
+    return { x: (cx - r.left - t.x) / t.scale, y: (cy - r.top - t.y) / t.scale };
+  }, []);
 
+  const hitTest = useCallback((wx: number, wy: number): GraphNode | null => {
+    for (const n of nodesRef.current) {
+      const dx = n.x - wx, dy = n.y - wy;
+      if (dx*dx + dy*dy <= (n.radius + 6) ** 2) return n;
+    }
+    return null;
+  }, []);
+
+  const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (drag.current.on) {
+      const d = drag.current;
+      tf.current = { ...tf.current, x: d.ox + e.clientX - d.sx, y: d.oy + e.clientY - d.sy };
+      return;
+    }
+    const w = toWorld(e.clientX, e.clientY);
+    hoveredRef.current = hitTest(w.x, w.y);
+    canvasRef.current!.style.cursor = hoveredRef.current ? 'pointer' : 'grab';
+  }, [toWorld, hitTest]);
+
+  const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    drag.current = { on: true, sx: e.clientX, sy: e.clientY, ox: tf.current.x, oy: tf.current.y };
+    canvasRef.current!.style.cursor = 'grabbing';
+  }, []);
+
+  const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    const moved = Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4;
+    drag.current.on = false;
+    canvasRef.current!.style.cursor = 'grab';
+    if (!moved) {
+      const w = toWorld(e.clientX, e.clientY);
+      const node = hitTest(w.x, w.y);
+      setSelected(prev => prev?.id === node?.id ? null : node ?? null);
+    }
+  }, [toWorld, hitTest]);
+
+  const onMouseLeave = useCallback(() => { drag.current.on = false; hoveredRef.current = null; }, []);
+
+  const resetView = useCallback(() => {
+    const c = containerRef.current;
+    if (c) tf.current = { x: c.clientWidth / 2, y: c.clientHeight / 2, scale: 1 };
+  }, []);
+
+  const rerunSim = useCallback(() => {
+    simActive.current = true; setSettled(false);
+    nodesRef.current.forEach(n => { n.vx = (Math.random()-0.5)*5; n.vy = (Math.random()-0.5)*5; });
+  }, []);
+
+  const poles = polesRef.current;
+
+  // ── UI ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full bg-[#0f1729] text-white">
-      {/* Left sidebar */}
-      <div className="w-52 flex-shrink-0 border-r border-slate-700 p-4 flex flex-col gap-3 overflow-y-auto">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Emotion Zones</p>
-        {ZONE_NAMES.map(zone => {
-          const meta = ZONES[zone];
-          const count = projectionsRef.current.filter(p => p.zone === zone).length;
-          return (
-            <button key={zone}
-              onClick={() => { setActiveZone(zone); setLayer('zone'); setSelected(null); hoveredDotRef.current = null; }}
-              className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded text-sm transition ${
-                activeZone === zone && layer === 'zone' ? 'bg-slate-600' : 'hover:bg-slate-700'
-              }`}>
-              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: meta.hex }} />
-              <span className="flex-1">{meta.label}</span>
-              <span className="text-slate-400 text-xs tabular-nums">{count}</span>
-            </button>
-          );
-        })}
-        <div className="text-xs text-slate-500 mt-auto pt-4 border-t border-slate-700">
-          <p className="font-semibold text-slate-400 mb-1">How to use</p>
-          <p>Click a zone to explore its tracks. Click a dot to see details.</p>
-        </div>
-      </div>
+    <div className="relative flex h-full bg-[#080e1a] overflow-hidden">
 
-      {/* Canvas */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Breadcrumb bar */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-700 text-sm">
-          <button
-            onClick={() => { setLayer('overview'); setActiveZone(null); setSelected(null); }}
-            className={`transition ${layer === 'overview' ? 'text-white font-semibold' : 'text-slate-400 hover:text-white'}`}>
-            All Zones
-          </button>
-          {activeZone && zoneMeta && (<>
-            <span className="text-slate-600">/</span>
-            <span className="font-semibold" style={{ color: zoneMeta.hex }}>{zoneMeta.label}</span>
-            <span className="text-slate-500 text-xs ml-1">({zoneTrackCount} tracks)</span>
-          </>)}
-          {layer === 'zone' && (
-            <button
-              onClick={() => { setLayer('overview'); setActiveZone(null); setSelected(null); }}
-              className="ml-auto text-xs text-slate-400 hover:text-white transition px-2 py-1 rounded bg-slate-700 hover:bg-slate-600">
-              ← Back
-            </button>
-          )}
-          {layer === 'overview' && !loading && (
-            <span className="ml-auto text-xs text-slate-500">
-              {projectionsRef.current.length.toLocaleString()} tracks mapped
-            </span>
-          )}
-        </div>
-
-        {/* Canvas container */}
-        <div ref={containerRef} className="flex-1 relative">
-          {loading && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-slate-400 text-sm animate-pulse">Loading emotion map…</span>
-            </div>
-          )}
-          {error && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-red-400 text-sm">Error: {error}</span>
-            </div>
-          )}
-          {!loading && !error && projectionsRef.current.length === 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center">
-              <span className="text-slate-400 text-sm">No emotion projections yet.</span>
-              <span className="text-slate-600 text-xs max-w-xs">
-                Projections are computed automatically as tracks finish analysis. Run the worker to process pending tracks.
-              </span>
-            </div>
-          )}
-          <canvas ref={canvasRef} className="absolute inset-0" />
-        </div>
-      </div>
-
-      {/* Right panel — track detail */}
-      {(selectedTrack || loadingDetail) && (
-        <div className="w-72 flex-shrink-0 border-l border-slate-700 p-4 overflow-y-auto">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-bold text-slate-300">Track Detail</p>
-            <button onClick={() => setSelected(null)}
-              className="text-slate-500 hover:text-white text-xl leading-none transition">×</button>
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#080e1a]">
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-slate-400">Mapping emotion space…</p>
+            <p className="text-slate-600 text-sm">Fetching tracks &amp; computing positions</p>
           </div>
-          {loadingDetail ? (
-            <p className="text-slate-400 text-sm animate-pulse">Loading…</p>
-          ) : selectedTrack ? (
-            <TrackDetailPanel track={selectedTrack} zoneMeta={zoneMeta} />
-          ) : null}
         </div>
       )}
-    </div>
-  );
-}
+      {error && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#080e1a]">
+          <div className="text-center">
+            <p className="text-red-400 text-lg mb-2">Graph unavailable</p>
+            <p className="text-slate-500 text-sm">{error}</p>
+            <p className="text-slate-600 text-xs mt-2">Is the analytics API running on port 8080?</p>
+          </div>
+        </div>
+      )}
 
-// ─── Track Detail Panel ───────────────────────────────────────────────────────
-
-function TrackDetailPanel({ track, zoneMeta }: { track: TrackDetail; zoneMeta: ZoneMeta | null }) {
-  const name = track.file_name
-    .replace(/\s*\[[\w-]+\](\.[^.]+)?$/, '')
-    .replace(/\.[^.]+$/, '')
-    .trim() || track.file_name;
-
-  const emotions = track.emotions ?? {};
-  const features = track.audio_features ?? {};
-
-  const emotionEntries = (Object.entries(emotions).filter(([, v]) => v != null) as [string, number][])
-    .sort((a, b) => b[1] - a[1]);
-
-  return (
-    <div className="space-y-4 text-sm">
-      <div>
-        <p className="font-semibold text-white leading-tight break-words">{name}</p>
-        {zoneMeta && (
-          <span className="mt-1.5 inline-block text-xs px-2 py-0.5 rounded-full"
-            style={{ background: zoneMeta.color, color: '#fff' }}>
-            {zoneMeta.label}
-          </span>
-        )}
-      </div>
-
-      {emotionEntries.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Emotions</p>
-          {emotionEntries.map(([eName, val]) => (
-            <div key={eName} className="mb-1.5">
-              <div className="flex justify-between text-xs text-slate-300 mb-0.5">
-                <span className="capitalize">{eName}</span>
-                <span>{(val * 100).toFixed(0)}%</span>
-              </div>
-              <div className="h-1.5 rounded bg-slate-700 overflow-hidden">
-                <div className="h-full rounded"
-                  style={{ width: `${val * 100}%`, background: ZONES[eName]?.hex ?? '#60a5fa' }} />
-              </div>
-            </div>
+      {/* ── Left sidebar ────────────────────────────────────────────────── */}
+      <div className="w-52 bg-[#0d1424] border-r border-slate-800 flex flex-col flex-shrink-0 overflow-y-auto">
+        <div className="px-4 py-3 border-b border-slate-800">
+          <h3 className="text-slate-400 font-bold text-xs uppercase tracking-widest">Emotion Filter</h3>
+        </div>
+        <div className="p-2 space-y-0.5 flex-1">
+          <button onClick={() => setFE(null)}
+            className={`w-full text-left px-3 py-1.5 rounded text-xs transition ${filterEmotion === null ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}>
+            All ({nodeCount})
+          </button>
+          {poles.map(p => (
+            <button key={p.name} onClick={() => setFE(filterEmotion === p.name ? null : p.name)}
+              className={`w-full text-left px-3 py-1.5 rounded text-xs transition flex items-center gap-2 ${filterEmotion === p.name ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}>
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+              <span className="capitalize">{p.name}</span>
+            </button>
           ))}
         </div>
-      )}
+        {filterEmotion && (
+          <div className="p-3 border-t border-slate-800 space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500 capitalize">{filterEmotion}</span>
+              <span className="text-white font-mono">{Math.round(threshold * 100)}%</span>
+            </div>
+            <input type="range" min={0} max={100} value={Math.round(threshold * 100)}
+              onChange={e => setThresh(Number(e.target.value) / 100)} className="w-full accent-violet-500" />
+            <p className="text-slate-700 text-xs">Dim below threshold</p>
+          </div>
+        )}
+        <div className="p-2 border-t border-slate-800 space-y-0.5">
+          <button onClick={() => setShowEdges(v => !v)}
+            className="w-full text-left px-3 py-1.5 rounded text-xs text-slate-500 hover:text-white hover:bg-slate-800 transition flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${showEdges ? 'bg-slate-400' : 'bg-slate-700'}`} />
+            {showEdges ? 'Hide' : 'Show'} connections
+          </button>
+          <button onClick={resetView}
+            className="w-full text-left px-3 py-1.5 rounded text-xs text-slate-500 hover:text-white hover:bg-slate-800 transition">
+            ⊙&nbsp; Reset view
+          </button>
+          <button onClick={rerunSim}
+            className="w-full text-left px-3 py-1.5 rounded text-xs text-slate-500 hover:text-white hover:bg-slate-800 transition">
+            ↺&nbsp; Re-run physics
+          </button>
+        </div>
+        <div className="p-3 border-t border-slate-800">
+          <p className="text-slate-700 text-xs font-semibold mb-1 uppercase tracking-wider">Legend</p>
+          <div className="text-slate-700 text-xs space-y-0.5">
+            <div>Position → emotion mix</div>
+            <div>Territory → KNN zones</div>
+            <div>Size → energy</div>
+            <div>Colour → valence</div>
+            <div>Ring → BPM speed</div>
+            <div>Glow → intensity</div>
+            <div>Lines → similar songs</div>
+            <div className="text-slate-800">─── hover ───</div>
+            <div>Dashes → top-6 similar</div>
+          </div>
+        </div>
+      </div>
 
-      {Object.keys(features).length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Audio Features</p>
-          <div className="space-y-1 text-xs">
-            {features.bpm != null && <Row label="BPM" value={features.bpm.toFixed(1)} />}
-            {features.key != null && <Row label="Key" value={`${features.key} ${features.mode ?? ''}`.trim()} />}
-            {features.duration_seconds != null && (
-              <Row label="Duration"
-                value={`${Math.floor(features.duration_seconds / 60)}:${String(Math.round(features.duration_seconds % 60)).padStart(2, '0')}`} />
-            )}
-            {features.energy      != null && <Row label="Energy"      value={`${(features.energy * 100).toFixed(0)}%`} />}
-            {features.danceability!= null && <Row label="Danceability" value={`${(features.danceability * 100).toFixed(0)}%`} />}
-            {features.valence     != null && <Row label="Valence"     value={`${(features.valence * 100).toFixed(0)}%`} />}
-            {features.loudness_db != null && <Row label="Loudness"    value={`${features.loudness_db.toFixed(1)} dB`} />}
+      {/* ── Canvas area ──────────────────────────────────────────────────── */}
+      <div ref={containerRef} className="flex-1 relative overflow-hidden">
+        <canvas ref={startLoop} className="absolute inset-0 w-full h-full"
+          style={{ cursor: 'grab', display: 'block' }}
+          onMouseMove={onMouseMove} onMouseDown={onMouseDown}
+          onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} />
+        {!settled && nodeCount > 0 && (
+          <div className="absolute top-3 right-4 bg-slate-900/70 text-slate-500 text-xs px-2 py-1 rounded-full backdrop-blur">
+            Settling…
+          </div>
+        )}
+        <div className="absolute bottom-3 right-4 text-slate-700 text-xs pointer-events-none select-none">
+          Scroll = zoom · Drag = pan · Click = details
+        </div>
+      </div>
+
+      {/* ── Right sidebar: selected node ─────────────────────────────────── */}
+      {selected && (
+        <div className="w-68 min-w-64 bg-[#0d1424] border-l border-slate-800 flex flex-col flex-shrink-0 overflow-y-auto">
+          <div className="px-4 py-3 border-b border-slate-800 flex justify-between items-start gap-2">
+            <p className="text-white text-sm font-semibold leading-snug">{selected.shortName}</p>
+            <button onClick={() => setSelected(null)}
+              className="text-slate-600 hover:text-white text-xl leading-none flex-shrink-0">×</button>
+          </div>
+          <div className="px-4 py-3 border-b border-slate-800">
+            <p className="text-slate-600 text-xs uppercase tracking-widest mb-3">Emotions</p>
+            <div className="space-y-2">
+              {poles.map(p => {
+                const v = selected.emotions[p.name] ?? 0;
+                return (
+                  <div key={p.name}>
+                    <div className="flex justify-between text-xs mb-0.5">
+                      <span className="text-slate-400 capitalize">{p.name}</span>
+                      <span className="text-slate-300 font-mono">{(v * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all"
+                        style={{ width: `${v * 100}%`, backgroundColor: p.color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-slate-600 text-xs uppercase tracking-widest mb-3">Audio Features</p>
+            <div className="space-y-1.5">
+              {Object.entries(selected.features)
+                .filter(([, v]) => v !== null && v !== undefined)
+                .map(([k, v]) => {
+                  const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                  let display: string;
+                  if (k === 'bpm') display = `${Number(v).toFixed(1)} BPM`;
+                  else if (k === 'duration_seconds') {
+                    const s = Number(v);
+                    display = `${Math.floor(s/60)}:${String(Math.floor(s) % 60).padStart(2, '0')}`;
+                  } else if (k === 'loudness_db') display = `${Number(v).toFixed(1)} dB`;
+                  else if (typeof v === 'number' && v >= 0 && v <= 1) display = `${(v * 100).toFixed(0)}%`;
+                  else display = String(v);
+                  return (
+                    <div key={k} className="flex justify-between text-xs">
+                      <span className="text-slate-600">{label}</span>
+                      <span className="text-slate-300 font-mono">{display}</span>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         </div>
       )}
@@ -582,12 +683,21 @@ function TrackDetailPanel({ track, zoneMeta }: { track: TrackDetail; zoneMeta: Z
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between">
-      <span className="text-slate-400">{label}</span>
-      <span className="text-slate-200 font-mono">{value}</span>
-    </div>
-  );
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
