@@ -92,7 +92,16 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
 - [ ] **Music exploration graph (PRIORITY 4)** - Energy vs Danceability scatter plot, BPM histogram, key/mode distribution, interactive filtering by audio features; data sourced from analytics API `/api/v1/tracks`
   - Can start once analytics v0.6.0 is deployed and tracks are re-analyzed (mode + raw features available)
   - `key` and `mode` fields now returned in `GET /api/v1/tracks` response
-- [ ] **Emotional graph explorer (PRIORITY 5)** — Force-directed graph (D3.js / react-force-graph) where each node = a song, edges = similarity score from analytics `track_similarity` table
+- [ ] **Graph Explorer — Playlist Builder / Radio Show Mode (PRIORITY 5)** — In the EmotionGraph, after curating and ranking songs, allow the user to build an ordered playlist for a radio show
+  - Floating/slide-in "Playlist" side panel triggered from the graph toolbar
+  - Click any track node to add it to the active playlist
+  - Ordered track list: title + zone chip, drag-up/down arrows to reorder
+  - Remove tracks (× button), name the playlist (radio show title field)
+  - Multiple playlists: create new, switch between, delete
+  - Export: copy ordered list to clipboard or download as JSON / plain text
+  - Store playlists in `localStorage` first; later persist to analytics API via `POST /api/v1/playlists`
+  - Analytics API (future): `GET /api/v1/playlists`, `POST /api/v1/playlists`, `PUT /api/v1/playlists/:id`, `DELETE /api/v1/playlists/:id`
+- [ ] **Emotional graph explorer (PRIORITY 6)** — Force-directed graph (D3.js / react-force-graph) where each node = a song, edges = similarity score from analytics `track_similarity` table
   - **Blocked on**: analytics emotion layer (migration 004 + `track_emotions` table) and similarity graph (migration 005 + `track_similarity` table)
   - Start frontend scaffolding (install `react-force-graph`, stub component, mock data) while analytics endpoints are being built
   - Node color = dominant emotion; node size = confidence; edge thickness = similarity score (threshold 0.7)
