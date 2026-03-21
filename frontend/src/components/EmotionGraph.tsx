@@ -240,6 +240,7 @@ export default function EmotionGraph() {
   const [error, setError]         = useState<string | null>(null);
   const [nodeCount, setCount]     = useState(0);
   const [selected, setSelected]   = useState<GraphNode | null>(null);
+  const [selectedLabel, setSelectedLabel] = useState<{ label_path: string[]; auto_label_path: string[] } | null>(null);
   const [filterEmotion, setFE]    = useState<string | null>(null);
   const [threshold, setThresh]    = useState(0.5);
   const [settled, setSettled]     = useState(false);
@@ -262,6 +263,14 @@ export default function EmotionGraph() {
   useEffect(() => { filterRef.current   = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
   useEffect(() => { showEdgesRef.current = showEdges; }, [showEdges]);
+
+  // Fetch label whenever a node is selected
+  useEffect(() => {
+    if (!selected) { setSelectedLabel(null); return; }
+    axios.get(`${ANALYTICS}/api/v1/tracks/${selected.id}/label`)
+      .then(r => setSelectedLabel(r.data))
+      .catch(() => setSelectedLabel(null));
+  }, [selected?.id]);
 
   // ── Fetch data ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -653,6 +662,27 @@ export default function EmotionGraph() {
               })}
             </div>
           </div>
+          {/* ── Curated label ───────────────────────────────────────────── */}
+          {(selectedLabel?.label_path?.length || selectedLabel?.auto_label_path?.length) ? (
+            <div className="px-4 py-3 border-b border-slate-800">
+              <p className="text-slate-600 text-xs uppercase tracking-widest mb-2">Label</p>
+              {selectedLabel.label_path?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1">
+                  {selectedLabel.label_path.map((seg, i) => (
+                    <span key={i} className="text-xs bg-indigo-900/60 text-indigo-300 rounded px-2 py-0.5">{seg}</span>
+                  ))}
+                </div>
+              )}
+              {selectedLabel.auto_label_path?.length > 0 && selectedLabel.label_path?.length === 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {selectedLabel.auto_label_path.map((seg, i) => (
+                    <span key={i} className="text-xs bg-slate-700/60 text-slate-400 rounded px-2 py-0.5 italic">{seg}</span>
+                  ))}
+                  <span className="text-slate-600 text-xs self-center">auto</span>
+                </div>
+              )}
+            </div>
+          ) : null}
           <div className="px-4 py-3">
             <p className="text-slate-600 text-xs uppercase tracking-widest mb-3">Audio Features</p>
             <div className="space-y-1.5">
