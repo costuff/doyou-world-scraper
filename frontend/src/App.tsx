@@ -9,9 +9,10 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import TrackBrowser from './components/TrackBrowser';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import EmotionGraph from './components/EmotionGraph';
+import CurateTab from './components/CurateTab';
 import { Footer } from './components/Footer';
 
-type View = 'dashboard' | 'tracks' | 'analytics' | 'graph';
+type View = 'dashboard' | 'tracks' | 'analytics' | 'graph' | 'curate';
 
 function App() {
   const { isConnected, jobs } = useWebSocket();
@@ -67,6 +68,16 @@ function App() {
                 >
                   Emotion Graph
                 </button>
+                <button
+                  onClick={() => setCurrentView('curate')}
+                  className={`px-4 py-2 rounded-lg transition ${
+                    currentView === 'curate'
+                      ? 'bg-pink-600 text-white'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-700'
+                  }`}
+                >
+                  Curate
+                </button>
               </nav>
             </div>
             <ConnectionStatus isConnected={isConnected} />
@@ -75,9 +86,14 @@ function App() {
       </header>
 
       {/* Main Content */}
-      {currentView === 'graph' ? (
+      {(currentView === 'graph' || currentView === 'curate') ? (
         <div style={{ height: 'calc(100vh - 73px)' }}>
-          <EmotionGraph />
+          {currentView === 'graph' && <EmotionGraph />}
+          {currentView === 'curate' && (
+            <div className="h-full overflow-y-auto p-6">
+              <CurateTab />
+            </div>
+          )}
         </div>
       ) : (
         <>
