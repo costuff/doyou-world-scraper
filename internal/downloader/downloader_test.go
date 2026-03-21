@@ -377,3 +377,269 @@ Track5,Artist5,,,2026,https://soundcloud.com/test/track5
 		}
 	})
 }
+
+// TestFindPlayableURLInHTML tests the pure HTML-matching helper directly.
+func TestFindPlayableURLInHTML(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		expected string
+	}{
+		{
+			name:     "SoundCloud anchor (highest priority)",
+			html:     `<a href="https://soundcloud.com/artist/track">SC</a>`,
+			expected: "https://soundcloud.com/artist/track",
+		},
+		{
+			name:     "YouTube anchor",
+			html:     `<a href="https://youtube.com/watch?v=abc">YT</a>`,
+			expected: "https://youtube.com/watch?v=abc",
+		},
+		{
+			name:     "SoundCloud URL in raw text - regex fallback",
+			html:     `<p>Listen on https://soundcloud.com/artist/track-name" today</p>`,
+			expected: `https://soundcloud.com/artist/track-name`,
+		},
+		{
+			name:     "YouTube URL in raw text - regex fallback",
+			html:     `<p>Watch at https://youtube.com/watch?v=dQw4w9WgXcQ" now</p>`,
+			expected: `https://youtube.com/watch?v=dQw4w9WgXcQ`,
+		},
+		{
+			name:     "youtu.be short link in raw text",
+			html:     `<p>https://youtu.be/abc123" here</p>`,
+			expected: `https://youtu.be/abc123`,
+		},
+		{
+			name:     "No playable URLs",
+			html:     `<a href="https://example.com">Example</a>`,
+			expected: "",
+		},
+		{
+			name:     "Empty HTML",
+			html:     "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findPlayableURLInHTML(tt.html)
+			if result != tt.expected {
+				t.Errorf("findPlayableURLInHTML() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestResolvePlayableURL_WithMock tests the lis.tn resolution logic by injecting
+// a mock htmlPageFetcher to avoid network/browser dependencies.
+func TestResolvePlayableURL_WithMock(t *testing.T) {
+	// Save and restore the package-level fetcher.
+	origFetcher := htmlPageFetcher
+	t.Cleanup(func() { htmlPageFetcher = origFetcher })
+
+	t.Run("Fetcher error is propagated", func(t *testing.T) {
+		htmlPageFetcher = func(_ string) (string, []string, error) {
+			return "", nil, fmt.Errorf("connection refused")
+		}
+		_, err := resolvePlayableURL("https://lis.tn/abc123")
+		if err == nil {
+			t.Fatal("Expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "chromedp error") {
+			t.Errorf("Unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("SoundCloud anchor found in page HTML", func(t *testing.T) {
+		htmlPageFetcher = func(_ string) (string, []string, error) {
+			return `<a href="https://soundcloud.com/artist/track">SC</a>`, nil, nil
+		}
+		result, err := resolvePlayableURL("https://lis.tn/abc123")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if result != "https://soundcloud.com/artist/track" {
+			t.Errorf("Expected SoundCloud URL, got %q", result)
+		}
+	})
+
+	t.Run("YouTube URL found via regex", func(t *testing.T) {
+		htmlPageFetcher = func(_ string) (string, []string, error) {
+			return `<p>https://youtube.com/watch?v=abc123" </p>`, nil, nil
+		}
+		result, err := resolvePlayableURL("https://lis.tn/xyz")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if !strings.Contains(result, "youtube.com") {
+			t.Errorf("Expected YouTube URL, got %q", result)
+		}
+	})
+
+	t.Run("No playable URL found returns error", func(t *testing.T) {
+		htmlPageFetcher = func(_ string) (string, []string, error) {
+			return `<p>No music here</p>`, nil, nil
+		}
+		_, err := resolvePlayableURL("https://lis.tn/nothing")
+		if err == nil {
+			t.Fatal("Expected error when no URL found")
+		}
+		if !strings.Contains(err.Error(), "no playable URL found") {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+
+	t.Run("Iframe fallback with SoundCloud URL", func(t *testing.T) {
+		origIframe := iframeHTMLFetcher
+		t.Cleanup(func() { iframeHTMLFetcher = origIframe })
+
+		// Main page has no playable URL but has iframe sources
+		htmlPageFetcher = func(_ string) (string, []string, error) {
+			return `<p>No direct link</p>`, []string{"https://widget.example.com/player"}, nil
+		}
+		// Iframe contains the SoundCloud link
+		iframeHTMLFetcher = func(_ string) (string, error) {
+			return `<a href="https://soundcloud.com/artist/track-from-iframe">SC</a>`, nil
+		}
+
+		result, err := resolvePlayableURL("https://lis.tn/iframe-test")
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if result != "https://soundcloud.com/artist/track-from-iframe" {
+			t.Errorf("Expected SoundCloud URL from iframe, got %q", result)
+		}
+	})
+
+	t.Run("Iframe fetch error is skipped", func(t *testing.T) {
+		origIframe := iframeHTMLFetcher
+		t.Cleanup(func() { iframeHTMLFetcher = origIframe })
+
+		htmlPageFetcher = func(_ string) (string, []string, error) {
+			return `<p>No direct link</p>`, []string{"https://failing-iframe.com"}, nil
+		}
+		iframeHTMLFetcher = func(_ string) (string, error) {
+			return "", fmt.Errorf("iframe connection refused")
+		}
+
+		_, err := resolvePlayableURL("https://lis.tn/iframe-fail")
+		if err == nil {
+			t.Fatal("Expected error (no URL found after skipping failed iframe)")
+		}
+		if !strings.Contains(err.Error(), "no playable URL found") {
+			t.Errorf("Unexpected error: %v", err)
+		}
+	})
+
+	t.Run("Empty iframe src is skipped", func(t *testing.T) {
+		origIframe := iframeHTMLFetcher
+		t.Cleanup(func() { iframeHTMLFetcher = origIframe })
+
+		htmlPageFetcher = func(_ string) (string, []string, error) {
+			return `<p>No links</p>`, []string{""}, nil
+		}
+		iframeHTMLFetcher = func(_ string) (string, error) {
+			t.Error("iframeHTMLFetcher should not be called for empty src")
+			return "", nil
+		}
+
+		_, err := resolvePlayableURL("https://lis.tn/empty-iframe")
+		if err == nil || !strings.Contains(err.Error(), "no playable URL found") {
+			t.Errorf("Expected 'no playable URL found', got: %v", err)
+		}
+	})
+}
+
+// TestDownloadFromCSV_EdgeCases tests branches not covered by the main test.
+func TestDownloadFromCSV_EdgeCases(t *testing.T) {
+	t.Run("Short row skipped when col beyond record length", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		csvPath := filepath.Join(tmpDir, "short.csv")
+		outDir := filepath.Join(tmpDir, "downloads")
+
+		// col=5, but each row only has 2 fields
+		csvContent := "Title,Artist\nTrack1,Artist1\nTrack2,Artist2\n"
+		_ = os.WriteFile(csvPath, []byte(csvContent), 0644)
+
+		result, err := DownloadFromCSV(csvPath, 5, outDir, "fake-yt-dlp", nil, nil)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if result.TotalSongs != 0 {
+			t.Errorf("Expected 0 songs (short rows skipped), got %d", result.TotalSongs)
+		}
+	})
+
+	t.Run("Empty listen URL skipped", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		csvPath := filepath.Join(tmpDir, "empty_links.csv")
+		outDir := filepath.Join(tmpDir, "downloads")
+
+		csvContent := "Title,Artist,Album,Label,Date,Listen\nTrack1,Artist1,,,2026,\n"
+		_ = os.WriteFile(csvPath, []byte(csvContent), 0644)
+
+		result, err := DownloadFromCSV(csvPath, 5, outDir, "fake-yt-dlp", nil, nil)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if result.TotalSongs != 0 {
+			t.Errorf("Expected 0 songs (empty links skipped), got %d", result.TotalSongs)
+		}
+	})
+
+	t.Run("Already downloaded file skips download attempt", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		csvPath := filepath.Join(tmpDir, "test.csv")
+		outDir := filepath.Join(tmpDir, "downloads")
+		_ = os.MkdirAll(outDir, 0755)
+
+		// Pre-create the expected output file so it appears "already downloaded"
+		preCreated := filepath.Join(outDir, "TrackAlreadyThere.mp3")
+		_ = os.WriteFile(preCreated, []byte("fake mp3"), 0644)
+
+		csvContent := "Title,Artist,Album,Label,Date,Listen\nTrackAlreadyThere,Artist1,,,2026,https://soundcloud.com/test/track\n"
+		_ = os.WriteFile(csvPath, []byte(csvContent), 0644)
+
+		// Save and restore mock fetcher to avoid chromedp
+		origFetcher := htmlPageFetcher
+		t.Cleanup(func() { htmlPageFetcher = origFetcher })
+		htmlPageFetcher = func(link string) (string, []string, error) {
+			return `<a href="` + link + `">direct</a>`, nil, nil
+		}
+
+		result, err := DownloadFromCSV(csvPath, 5, outDir, "fake-yt-dlp", nil, nil)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if result.TotalSongs != 1 {
+			t.Errorf("Expected 1 song, got %d", result.TotalSongs)
+		}
+		if result.Downloaded != 1 {
+			t.Errorf("Expected 1 already-downloaded, got %d", result.Downloaded)
+		}
+	})
+
+	t.Run("Successful download increments downloaded count", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		csvPath := filepath.Join(tmpDir, "test.csv")
+		outDir := filepath.Join(tmpDir, "downloads")
+
+		// Use a URL that resolves without chromedp (not lis.tn)
+		csvContent := "Title,Artist,Album,Label,Date,Listen\nMyTrack,Artist1,,,2026,https://soundcloud.com/test/track\n"
+		_ = os.WriteFile(csvPath, []byte(csvContent), 0644)
+
+		// Use "echo" as yt-dlp — it always succeeds and ignores all flags
+		result, err := DownloadFromCSV(csvPath, 5, outDir, "echo", nil, nil)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if result.TotalSongs != 1 {
+			t.Errorf("Expected 1 song, got %d", result.TotalSongs)
+		}
+		if result.Downloaded != 1 {
+			t.Errorf("Expected 1 downloaded (via echo), got %d", result.Downloaded)
+		}
+	})
+}

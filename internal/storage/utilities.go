@@ -117,7 +117,7 @@ func hashFileMD5(filePath string) ([16]byte, error) {
 	if err != nil {
 		return result, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	h := md5.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -167,7 +167,7 @@ func MatchDownloadsToCSVs(outDir, downloadsDir string) (*MatchDownloadsResult, e
 		}
 		r := csv.NewReader(csvFile)
 		records, err := r.ReadAll()
-		csvFile.Close()
+			csvFile.Close() //nolint:errcheck
 		if err != nil {
 			continue
 		}
@@ -464,8 +464,8 @@ func scanAllTracks(downloadsDir string) ([]TrackInfo, error) {
 
 		// Try to read ID3 tags
 		if file, err := os.Open(path); err == nil {
-			defer file.Close()
-			if metadata, err := readID3Tags(file); err == nil {
+				defer file.Close() //nolint:errcheck
+				if metadata, err := readID3Tags(file); err == nil {
 				track.Title = metadata.Title
 				track.Artist = metadata.Artist
 				track.Album = metadata.Album
@@ -731,7 +731,7 @@ func MoveDownloadsToNAS(downloadsDir, nasDir string, job *jobs.Job, progressCall
 		if err != nil || srcInfo.Size() != dstInfo.Size() {
 			result.FailedFiles++
 			result.Errors = append(result.Errors, fmt.Sprintf("Verification failed for %s", filename))
-			os.Remove(dstPath) // Clean up failed copy
+				os.Remove(dstPath) //nolint:errcheck // best-effort cleanup of failed copy
 			continue
 		}
 
@@ -844,13 +844,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer sourceFile.Close() //nolint:errcheck
 
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer destFile.Close() //nolint:errcheck
 
 	_, err = io.Copy(destFile, sourceFile)
 	if err != nil {

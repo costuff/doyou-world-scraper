@@ -59,7 +59,7 @@ func (h *WebSocketHub) run() {
 			for client := range h.clients {
 				if client.conn == conn {
 					delete(h.clients, client)
-					client.conn.Close()
+					client.conn.Close() //nolint:errcheck
 					break
 				}
 			}

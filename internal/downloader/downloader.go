@@ -72,61 +72,83 @@ func extractPlayableFromAnchors(htmlStr string) string {
 	return ""
 }
 
-func resolvePlayableURL(link string) (string, error) {
-	if !strings.Contains(link, "lis.tn/") {
-		return link, nil
-	}
+// htmlPageFetcher fetches the outer HTML and iframe sources for a URL.
+// It can be replaced in tests to avoid launching headless Chrome.
+var htmlPageFetcher = chromedpFetchPage
+
+// iframeHTMLFetcher fetches the HTML for a single iframe URL.
+// It can be replaced in tests to avoid launching headless Chrome.
+var iframeHTMLFetcher = chromedpFetchIframePage
+
+// chromedpFetchPage is the production implementation using headless Chrome.
+func chromedpFetchPage(link string) (htmlStr string, iframeSrcs []string, err error) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 	defer cancel()
 	ctx, cancel = context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	var htmlStr string
-	var iframeSrcs []string
-	err := chromedp.Run(ctx,
+	err = chromedp.Run(ctx,
 		chromedp.Navigate(link),
 		chromedp.OuterHTML("html", &htmlStr, chromedp.ByQuery),
 		chromedp.EvaluateAsDevTools(`Array.from(document.querySelectorAll('iframe')).map(f => f.src)`, &iframeSrcs),
 	)
+	return
+}
+
+// chromedpFetchIframePage fetches HTML from an iframe URL using headless Chrome.
+func chromedpFetchIframePage(src string) (string, error) {
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+	ctx, cancel = context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	var html string
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(src),
+		chromedp.OuterHTML("html", &html, chromedp.ByQuery),
+	); err != nil {
+		return "", err
+	}
+	return html, nil
+}
+
+// findPlayableURLInHTML searches an HTML string for playable platform URLs.
+// It checks anchor href attributes first (priority-ordered), then falls back
+// to regex matching for SoundCloud and YouTube URLs embedded in page text.
+func findPlayableURLInHTML(htmlStr string) string {
+	if playable := extractPlayableFromAnchors(htmlStr); playable != "" {
+		return playable
+	}
+	reSC := regexp.MustCompile(`https://soundcloud\.com/[^"]+`)
+	if m := reSC.FindString(htmlStr); m != "" {
+		return m
+	}
+	reYT := regexp.MustCompile(`https://(www\.)?(youtube\.com|youtu\.be)/[^"]+`)
+	if m := reYT.FindString(htmlStr); m != "" {
+		return m
+	}
+	return ""
+}
+
+func resolvePlayableURL(link string) (string, error) {
+	if !strings.Contains(link, "lis.tn/") {
+		return link, nil
+	}
+	htmlStr, iframeSrcs, err := htmlPageFetcher(link)
 	if err != nil {
 		return "", fmt.Errorf("chromedp error: %v", err)
 	}
-	playable := extractPlayableFromAnchors(htmlStr)
-	if playable != "" {
+	if playable := findPlayableURLInHTML(htmlStr); playable != "" {
 		return playable, nil
-	}
-	reSC := regexp.MustCompile(`https://soundcloud\\.com/[^"]+`)
-	matchSC := reSC.FindString(htmlStr)
-	if matchSC != "" {
-		return matchSC, nil
-	}
-	reYT := regexp.MustCompile(`https://(www\\.)?(youtube\\.com|youtu\\.be)/[^"]+`)
-	matchYT := reYT.FindString(htmlStr)
-	if matchYT != "" {
-		return matchYT, nil
 	}
 	for _, src := range iframeSrcs {
 		if src == "" {
 			continue
 		}
-		var iframeHTML string
-		err := chromedp.Run(ctx,
-			chromedp.Navigate(src),
-			chromedp.OuterHTML("html", &iframeHTML, chromedp.ByQuery),
-		)
-		if err != nil {
+		iframeHTML, iframeErr := iframeHTMLFetcher(src)
+		if iframeErr != nil {
 			continue
 		}
-		playable := extractPlayableFromAnchors(iframeHTML)
-		if playable != "" {
+		if playable := findPlayableURLInHTML(iframeHTML); playable != "" {
 			return playable, nil
-		}
-		matchSC := reSC.FindString(iframeHTML)
-		if matchSC != "" {
-			return matchSC, nil
-		}
-		matchYT := reYT.FindString(iframeHTML)
-		if matchYT != "" {
-			return matchYT, nil
 		}
 	}
 	return "", fmt.Errorf("no playable URL found in %s", link)
@@ -142,7 +164,7 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, j
 	if err != nil {
 		return nil, fmt.Errorf("error opening CSV: %v", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	r := csv.NewReader(f)
 	records, err := r.ReadAll()
@@ -254,7 +276,7 @@ func DownloadFromCSV(csvPath string, col int, outDir string, ytdlpPath string, j
 		failedPath := filepath.Join(outDir, "failed_songs.csv")
 		failedFile, err := os.Create(failedPath)
 		if err == nil {
-			defer failedFile.Close()
+				defer failedFile.Close() //nolint:errcheck
 			w := csv.NewWriter(failedFile)
 			defer w.Flush()
 			for _, row := range result.FailedSongs {
@@ -282,7 +304,7 @@ func DownloadFromFolder(folderPath string, col int, outDir string, ytdlpPath str
 		}
 		r := csv.NewReader(f)
 		records, _ := r.ReadAll()
-		f.Close()
+		f.Close() //nolint:errcheck
 		if len(records) > 1 {
 			totalSongsAcrossAllCSVs += len(records) - 1 // -1 for header
 		}

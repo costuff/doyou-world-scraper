@@ -55,6 +55,56 @@ func waitForJobDone(t *testing.T, jobID string, timeout time.Duration) *jobs.Job
 	return jobs.GetJob(jobID)
 }
 
+// ---- HandleVersion coverage ----
+
+// TestHandleVersion_WithVersionFiles exercises the VERSION file-reading branches
+// by temporarily creating the files in the package directory (tests CWD).
+func TestHandleVersion_WithVersionFiles(t *testing.T) {
+	const backendVer = "9.8.7"
+	const frontendVer = "9.8.6"
+
+	if err := os.WriteFile("VERSION", []byte(backendVer+"\n"), 0644); err != nil {
+		t.Skip("cannot write VERSION file in test CWD")
+	}
+	t.Cleanup(func() { os.Remove("VERSION") }) //nolint:errcheck
+
+	if err := os.MkdirAll("frontend", 0755); err != nil {
+		t.Skip("cannot create frontend dir in test CWD")
+	}
+	if err := os.WriteFile("frontend/VERSION", []byte(frontendVer+"\n"), 0644); err != nil {
+		t.Skip("cannot write frontend/VERSION file in test CWD")
+	}
+	t.Cleanup(func() {
+		os.Remove("frontend/VERSION") //nolint:errcheck
+		os.Remove("frontend")        //nolint:errcheck
+	})
+
+	h, _, _ := makeHandlers(t)
+	app := fiber.New()
+	app.Get("/version", h.HandleVersion)
+
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected 200, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("Invalid JSON: %v", err)
+	}
+	if result["backend"] != backendVer {
+		t.Errorf("Expected backend=%q, got %v", backendVer, result["backend"])
+	}
+	if result["frontend"] != frontendVer {
+		t.Errorf("Expected frontend=%q, got %v", frontendVer, result["frontend"])
+	}
+}
+
 // ---- HandleStats coverage ----
 
 // TestHandleStats_WithCSVFiles exercises the CSV-counting logic inside HandleStats

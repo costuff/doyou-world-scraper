@@ -80,9 +80,10 @@ func (h *Handlers) resolveDownloadsDir(requestedDir string) (string, error) {
 	if !filepath.IsAbs(downloadsDir) {
 		// Check if we're in Docker first
 		if fileExists("/app/downloads") {
-			if downloadsDir == h.cfg.DownloadsDir || downloadsDir == "downloads" {
+			switch downloadsDir {
+			case h.cfg.DownloadsDir, "downloads":
 				downloadsDir = "/app/downloads"
-			} else if downloadsDir == "nas" {
+			case "nas":
 				downloadsDir = "/nas"
 			}
 		} else {
@@ -732,7 +733,9 @@ func (h *Handlers) HandleStats(c *fiber.Ctx) error {
 				if lineCount > 1 {
 					totalTracks += lineCount - 1
 				}
-				f.Close()
+				if err := f.Close(); err != nil {
+						logger.Warn(fmt.Sprintf("Failed to close CSV file: %v", err))
+					}
 			}
 
 			// Extract date from filename (tracks-YYYY-MM-DD.csv)

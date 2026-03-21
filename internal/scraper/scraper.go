@@ -112,7 +112,7 @@ func scrapeSingleDateWithContext(ctx context.Context, dateStr string) (int, erro
 	if err != nil {
 		return 0, fmt.Errorf("error creating CSV file: %v", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	w := csv.NewWriter(f)
 	defer w.Flush()
 	// Write header
