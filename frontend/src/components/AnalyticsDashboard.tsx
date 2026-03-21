@@ -31,8 +31,8 @@ export const AnalyticsDashboard = () => {
       ]);
 
       if (tracksResponse.status === 'fulfilled' && tracksResponse.value?.data) {
-        const apiTracks = tracksResponse.value.data.tracks || [];
-        console.log(`Loaded ${apiTracks.length} of ${tracksResponse.value.data.total} analyzed tracks`);
+        const apiTracks = (tracksResponse.value.data.tracks || []).filter((t: any) => t.features != null);
+        console.log(`Loaded ${apiTracks.length} analyzed tracks`);
         setTracks(
           apiTracks.map((track: any) => ({
             file_path: track.file_path,

@@ -12,7 +12,7 @@
  *  5. Save via POST /analytics-api/api/v1/tracks/:id/label
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
 const ANALYTICS = import.meta.env.VITE_ANALYTICS_API_URL || '/analytics-api';
@@ -23,7 +23,7 @@ interface Track {
   id: number;
   file_name: string;
   analysis_status: string;
-  audio_features?: {
+  features?: {
     bpm?: number;
     key?: string;
     mode?: string;
@@ -73,6 +73,10 @@ export default function CurateTab() {
   const [error, setError]           = useState<string | null>(null);
   const [newNodeName, setNewNodeName] = useState('');
   const [addingTo, setAddingTo]     = useState<TaxonomyNode | null>(null);
+  const [playingId, setPlayingId]   = useState<number | null>(null);
+  const [autoLabeling, setAutoLabeling] = useState(false);
+  const [autoLabelDone, setAutoLabelDone] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // ── Load tracks + taxonomy on mount ─────────────────────────────────────────
   useEffect(() => {
@@ -80,11 +84,12 @@ export default function CurateTab() {
     async function load() {
       try {
         const [tracksRes, taxRes] = await Promise.all([
-          axios.get(`${ANALYTICS}/api/v1/tracks?status=completed&limit=100`),
+          axios.get(`${ANALYTICS}/api/v1/tracks?limit=500`),
           axios.get(`${ANALYTICS}/api/v1/taxonomy`),
         ]);
         if (cancelled) return;
-        setTracks(tracksRes.data.tracks ?? []);
+        // Only show tracks that have been analyzed (have audio features in DB)
+        setTracks((tracksRes.data.tracks ?? []).filter((t: any) => t.features != null));
         setTaxonomy(taxRes.data.nodes ?? []);
         setLoading(false);
       } catch (err) {
@@ -171,6 +176,51 @@ export default function CurateTab() {
     }
   }, [newNodeName, addingTo]);
 
+  // ── Audio playback ───────────────────────────────────────────────────────────
+  const togglePlay = useCallback((track: Track, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (playingId === track.id) {
+      audioRef.current?.pause();
+      setPlayingId(null);
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.onended = null;
+      }
+      const streamUrl = `/api/v1/tracks/stream?file=${encodeURIComponent(track.file_name)}`;
+      const audio = new Audio(streamUrl);
+      audio.play().catch(() => {});
+      audio.onended = () => setPlayingId(null);
+      audioRef.current = audio;
+      setPlayingId(track.id);
+    }
+  }, [playingId]);
+
+  // ── Auto-label all ───────────────────────────────────────────────────────────
+  const autoLabelAll = useCallback(async () => {
+    if (autoLabeling) return;
+    setAutoLabeling(true);
+    try {
+      await axios.post(`${ANALYTICS}/api/v1/labels/auto-label-all`);
+      // Give the server 2s to process, then reload labels
+      setTimeout(async () => {
+        setLabels({});
+        setAutoLabeling(false);
+        setAutoLabelDone(true);
+        setTimeout(() => setAutoLabelDone(false), 3000);
+        try {
+          const [tracksRes] = await Promise.all([
+            axios.get(`${ANALYTICS}/api/v1/tracks?limit=500`),
+          ]);
+          setTracks((tracksRes.data.tracks ?? []).filter((t: any) => t.features != null));
+        } catch { /* ignore refresh error */ }
+      }, 2000);
+    } catch (err) {
+      setAutoLabeling(false);
+      alert('Auto-label failed: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  }, [autoLabeling]);
+
   // ── UI helpers ───────────────────────────────────────────────────────────────
   const displayName = (track: Track) =>
     track.file_name
@@ -212,6 +262,15 @@ export default function CurateTab() {
               <div className="text-xs text-slate-400">{label}</div>
             </div>
           ))}
+          <div className="flex items-center pl-1 border-l border-slate-700">
+            <button
+              onClick={autoLabelAll}
+              disabled={autoLabeling}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-violet-700 hover:bg-violet-600 disabled:opacity-50 text-white transition font-medium whitespace-nowrap"
+            >
+              {autoLabeling ? '⟳ Labelling…' : autoLabelDone ? '✓ Done!' : '✨ Auto-label'}
+            </button>
+          </div>
         </div>
 
         <div className="bg-slate-800 rounded-xl flex-1 overflow-y-auto">
@@ -232,6 +291,18 @@ export default function CurateTab() {
                   selected?.id === track.id ? 'bg-slate-700' : 'hover:bg-slate-700/50'
                 }`}
               >
+                {/* Play/Pause button */}
+                <button
+                  onClick={(e) => togglePlay(track, e)}
+                  className={`flex-shrink-0 w-6 h-6 mt-0.5 rounded-full flex items-center justify-center text-[10px] transition ${
+                    playingId === track.id
+                      ? 'bg-green-500 text-white'
+                      : 'bg-slate-600 hover:bg-slate-500 text-slate-300'
+                  }`}
+                  title={playingId === track.id ? 'Pause' : 'Play'}
+                >
+                  {playingId === track.id ? '⏸' : '▶'}
+                </button>
                 <div className="flex-1 min-w-0">
                   <p className="text-white truncate text-xs font-medium">{displayName(track)}</p>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -268,21 +339,39 @@ export default function CurateTab() {
           <div className="space-y-5">
             {/* Track info */}
             <div className="bg-slate-800 rounded-xl p-5">
-              <h2 className="font-bold text-white text-base mb-1 leading-tight">
-                {displayName(selected)}
-              </h2>
-              <div className="flex flex-wrap gap-3 mt-2 text-xs text-slate-400">
-                {selected.audio_features?.bpm != null && (
-                  <span>BPM: <span className="text-slate-200 font-mono">{selected.audio_features.bpm.toFixed(0)}</span></span>
+              <div className="flex items-start gap-3">
+                <button
+                  onClick={(e) => togglePlay(selected, e)}
+                  className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition text-lg ${
+                    playingId === selected.id
+                      ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
+                      : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                  }`}
+                  title={playingId === selected.id ? 'Pause' : 'Play preview'}
+                >
+                  {playingId === selected.id ? '⏸' : '▶'}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <h2 className="font-bold text-white text-base mb-1 leading-tight">
+                    {displayName(selected)}
+                  </h2>
+                  {playingId === selected.id && (
+                    <p className="text-[11px] text-green-400 animate-pulse">▶ Now playing…</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3 mt-3 text-xs text-slate-400">
+                {selected.features?.bpm != null && (
+                  <span>BPM: <span className="text-slate-200 font-mono">{selected.features.bpm!.toFixed(0)}</span></span>
                 )}
-                {selected.audio_features?.key && (
-                  <span>Key: <span className="text-slate-200 font-mono">{selected.audio_features.key} {selected.audio_features.mode}</span></span>
+                {selected.features?.key && (
+                  <span>Key: <span className="text-slate-200 font-mono">{selected.features.key} {selected.features.mode}</span></span>
                 )}
-                {selected.audio_features?.energy != null && (
-                  <span>Energy: <span className="text-slate-200 font-mono">{(selected.audio_features.energy * 100).toFixed(0)}%</span></span>
+                {selected.features?.energy != null && (
+                  <span>Energy: <span className="text-slate-200 font-mono">{(selected.features.energy! * 100).toFixed(0)}%</span></span>
                 )}
-                {selected.audio_features?.valence != null && (
-                  <span>Valence: <span className="text-slate-200 font-mono">{(selected.audio_features.valence * 100).toFixed(0)}%</span></span>
+                {selected.features?.valence != null && (
+                  <span>Valence: <span className="text-slate-200 font-mono">{(selected.features.valence! * 100).toFixed(0)}%</span></span>
                 )}
               </div>
             </div>
