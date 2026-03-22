@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -332,6 +333,10 @@ func TestHandlerErrorCases(t *testing.T) {
 			}
 		}
 	})
+
+	// Give any 202-accepted background goroutines time to finish
+	// before t.TempDir() cleanup runs, preventing "directory not empty" errors.
+	time.Sleep(200 * time.Millisecond)
 }
 
 // TestConcurrentRequests tests handling of simultaneous API calls
