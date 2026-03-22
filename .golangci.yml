@@ -4,17 +4,15 @@ run:
   timeout: 5m
   tests: false
   build-tags: []
-  exclude-dirs:
+
+exclusions:
+  paths:
     - vendor
     - node_modules
     - frontend
 
 issues:
-  # No files to exclude - all legacy scripts removed
-  exclude-files: []
-  # Maximum issues count per one linter (0 = unlimited)
   max-issues-per-linter: 0
-  # Maximum count of issues with the same text (0 = unlimited)
   max-same-issues: 0
 
 linters:
@@ -23,12 +21,9 @@ linters:
     - unused
     - staticcheck
     - govet
-
-linters-settings:
-  errcheck:
-    # Check type assertions
-    check-type-assertions: true
-    # Check blank assignments
-    check-blank: true
-  govet:
-    enable-all: true
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    govet:
+      enable-all: true
