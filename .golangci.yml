@@ -3,13 +3,6 @@ version: "2"
 run:
   timeout: 5m
   tests: false
-  build-tags: []
-
-exclusions:
-  paths:
-    - vendor
-    - node_modules
-    - frontend
 
 issues:
   max-issues-per-linter: 0
