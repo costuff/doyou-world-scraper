@@ -173,7 +173,7 @@ function stepSimulation(nodes: GraphNode[], poles: Pole[]): boolean {
     n.y += n.vy;
     totalKE += Math.abs(n.vx) + Math.abs(n.vy);
   }
-  return totalKE / Math.max(1, nodes.length) > 0.08;
+  return totalKE / Math.max(1, nodes.length) > 0.03;
 }
 
 // ─── Persistent similarity edges ──────────────────────────────────────────────
@@ -341,7 +341,7 @@ export default function EmotionGraph() {
 
       if (simActive.current && nodes.length > 0) {
         // Run multiple steps per frame so large graphs settle faster
-        const stepsPerFrame = nodes.length > 200 ? 4 : nodes.length > 50 ? 2 : 1;
+        const stepsPerFrame = nodes.length > 200 ? 8 : nodes.length > 50 ? 4 : 2;
         let still = false;
         for (let s = 0; s < stepsPerFrame; s++) {
           if (!stepSimulation(nodes, poles)) { still = true; break; }

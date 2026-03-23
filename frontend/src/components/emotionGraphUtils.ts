@@ -6,9 +6,9 @@
 export const POLE_ORBIT = 310;
 export const NEBULA_R   = 215;
 export const ATTRACT    = 0.016;
-export const REPEL      = 1800;
-export const CENTER_PULL = 0.0006;
-export const DAMPING    = 0.80;
+export const REPEL      = 1200;
+export const CENTER_PULL = 0.0008;
+export const DAMPING    = 0.72;
 export const NODE_MIN_R = 4;
 export const NODE_MAX_R = 14;
 
