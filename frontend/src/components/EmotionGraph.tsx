@@ -278,7 +278,7 @@ export default function EmotionGraph() {
     (async () => {
       try {
         const [trRes, emRes] = await Promise.all([
-          axios.get(`${ANALYTICS}/api/v1/tracks`,   { params: { limit: 5000 }, timeout: 20000 }),
+          axios.get(`${ANALYTICS}/api/v1/tracks`,   { params: { status: 'completed', limit: 5000 }, timeout: 20000 }),
           axios.get(`${ANALYTICS}/api/v1/emotions`,  { params: { limit: 5000 }, timeout: 20000 }),
         ]);
         if (dead) return;
