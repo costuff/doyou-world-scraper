@@ -297,14 +297,17 @@ export default function EmotionGraph() {
         dimsRef.current = keys;
         const poles = buildPoles(keys);
         const nodes = buildNodes(tracks, emotionsMap, poles);
+        // Pre-run physics silently so nodes appear already settled (no flying animation)
+        for (let i = 0; i < 800; i++) { if (!stepSimulation(nodes, poles)) break; }
         polesRef.current   = poles;
         nodesRef.current   = nodes;
         edgesRef.current   = buildEdges(nodes, keys);
         terrainRef.current = buildTerrain(poles);
-        simActive.current  = true;
+        simActive.current  = false; // already settled
         const cont = containerRef.current;
         if (cont) tf.current = { x: cont.clientWidth / 2, y: cont.clientHeight / 2, scale: 1 };
         setCount(nodes.length);
+        setSettled(true);
         setError(null);
       } catch (e: unknown) {
         if (!dead) setError(e instanceof Error ? e.message : 'Failed to load graph data');
@@ -321,7 +324,12 @@ export default function EmotionGraph() {
     cancelAnimationFrame(animRef.current);
     if (!el) return;
 
-    const tick = () => {
+    let lastRender = 0;
+    const tick = (ts: number) => {
+      // Throttle to ~15fps when settled and nothing interactive
+      const isIdle = !simActive.current && !hoveredRef.current;
+      if (isIdle && ts - lastRender < 66) { animRef.current = requestAnimationFrame(tick); return; }
+      lastRender = ts;
       const W = el.parentElement?.clientWidth  ?? 0;
       const H = el.parentElement?.clientHeight ?? 0;
       if (el.width !== W) el.width = W;
@@ -382,8 +390,8 @@ export default function EmotionGraph() {
       const flt  = filterRef.current;
       const dims = dimsRef.current;
 
-      // Layer 3: Persistent similarity edges
-      if (showEdgesRef.current && edges.length > 0) {
+      // Layer 3: Persistent similarity edges (skip for large graphs — too cluttered)
+      if (showEdgesRef.current && edges.length > 0 && nodes.length <= 250) {
         ctx.setLineDash([]);
         ctx.lineWidth = 0.8;
         for (const edge of edges) {
@@ -407,6 +415,7 @@ export default function EmotionGraph() {
       }
 
       // Layer 5: Song nodes
+      const largGraph = nodes.length > 150;
       for (const node of nodes) {
         const isHov  = node === hov;
         const isSel  = node === sel;
@@ -414,27 +423,34 @@ export default function EmotionGraph() {
         const dimmed = flt.emotion !== null && emVal < flt.threshold;
         const [r, g, b] = node.colorRgb;
         const radius = node.radius + (isHov || isSel ? 3 : 0);
-        const glow   = (node.features.energy ?? 0.5) * 20;
 
         ctx.save();
         ctx.globalAlpha = dimmed ? 0.08 : 1;
 
-        if (!dimmed && node.bpmNorm > 0.38) {
-          ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 3;
-          ctx.strokeStyle = `rgba(${r},${g},${b},${(node.bpmNorm*0.7).toFixed(2)})`; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.arc(node.x, node.y, radius+5, 0, Math.PI*2); ctx.stroke();
-        }
-
-        ctx.shadowColor = `rgb(${r},${g},${b})`;
-        ctx.shadowBlur  = dimmed ? 0 : (isHov || isSel ? glow*2.2 : glow);
-        ctx.fillStyle   = `rgb(${r},${g},${b})`;
-        ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI*2); ctx.fill();
-
-        if (isSel) { ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); }
-
-        if (!dimmed) {
-          ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.22)';
-          ctx.beginPath(); ctx.arc(node.x - radius*0.28, node.y - radius*0.3, radius*0.4, 0, Math.PI*2); ctx.fill();
+        if (largGraph) {
+          // Minimal flat dot — no shadowBlur, no rings, no specular
+          if (isHov || isSel) {
+            ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 10;
+          }
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI*2); ctx.fill();
+          if (isSel) { ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); }
+        } else {
+          const glow = (node.features.energy ?? 0.5) * 20;
+          if (!dimmed && node.bpmNorm > 0.38) {
+            ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 3;
+            ctx.strokeStyle = `rgba(${r},${g},${b},${(node.bpmNorm*0.7).toFixed(2)})`; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(node.x, node.y, radius+5, 0, Math.PI*2); ctx.stroke();
+          }
+          ctx.shadowColor = `rgb(${r},${g},${b})`;
+          ctx.shadowBlur  = dimmed ? 0 : (isHov || isSel ? glow*2.2 : glow);
+          ctx.fillStyle   = `rgb(${r},${g},${b})`;
+          ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI*2); ctx.fill();
+          if (isSel) { ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); }
+          if (!dimmed) {
+            ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.22)';
+            ctx.beginPath(); ctx.arc(node.x - radius*0.28, node.y - radius*0.3, radius*0.4, 0, Math.PI*2); ctx.fill();
+          }
         }
         ctx.restore();
       }

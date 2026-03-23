@@ -87,7 +87,7 @@ export default function CurateTab() {
     async function load() {
       try {
         const [tracksResult, taxResult] = await Promise.allSettled([
-          axios.get(`${ANALYTICS}/api/v1/tracks?limit=500`),
+          axios.get(`${ANALYTICS}/api/v1/tracks?limit=5000`),
           axios.get(`${ANALYTICS}/api/v1/taxonomy`),
         ]);
         if (cancelled) return;
@@ -250,7 +250,7 @@ export default function CurateTab() {
         setTimeout(() => setAutoLabelDone(false), 3000);
         try {
           const [tracksRes] = await Promise.all([
-            axios.get(`${ANALYTICS}/api/v1/tracks?limit=500`),
+            axios.get(`${ANALYTICS}/api/v1/tracks?limit=5000`),
           ]);
           setTracks((tracksRes.data.tracks ?? []).filter((t: any) => t.features != null));
         } catch { /* ignore refresh error */ }
