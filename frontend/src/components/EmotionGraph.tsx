@@ -100,16 +100,10 @@ function drawRoundRect(
 function buildNodes(
   tracks: RawTrack[],
   emotionsMap: Map<number, Record<string, number>>,
-  poles: Pole[],
 ): GraphNode[] {
   return tracks.filter(t => emotionsMap.has(t.id) && t.features != null).map(t => {
     const emotions = emotionsMap.get(t.id)!;
     const f = t.features;
-
-    let sx = 0, sy = 0, tw = 0;
-    poles.forEach(p => { const w = emotions[p.name] ?? 0; sx += p.x * w; sy += p.y * w; tw += w; });
-    const ix = tw > 0 ? sx / tw : 0;
-    const iy = tw > 0 ? sy / tw : 0;
 
     const raw = t.file_name;
     const clean = raw.replace(/\s*\[[\w-]+\](\.[^.]+)?$/, '').replace(/\.[^.]+$/, '').trim() || raw;
@@ -125,8 +119,9 @@ function buildNodes(
       shortName,
       features: f,
       emotions,
-      x:  ix + (Math.random() - 0.5) * 60,
-      y:  iy + (Math.random() - 0.5) * 60,
+      // Start near centre — emotion-pole attraction will bloom nodes outward
+      x:  (Math.random() - 0.5) * 50,
+      y:  (Math.random() - 0.5) * 50,
       vx: 0, vy: 0,
       radius: NODE_MIN_R + energy * (NODE_MAX_R - NODE_MIN_R),
       colorRgb: valenceRgb(valence),
@@ -299,10 +294,10 @@ export default function EmotionGraph() {
         const keys = dims.size > 0 ? [...dims] : Object.keys(KNOWN_PALETTE);
         dimsRef.current = keys;
         const poles = buildPoles(keys);
-        const nodes = buildNodes(tracks, emotionsMap, poles);
+        const nodes = buildNodes(tracks, emotionsMap);
         nodes.forEach(n => {
-          n.vx = (Math.random() - 0.5) * 1.6;
-          n.vy = (Math.random() - 0.5) * 1.6;
+          n.vx = (Math.random() - 0.5) * 2.5;
+          n.vy = (Math.random() - 0.5) * 2.5;
         });
         polesRef.current   = poles;
         nodesRef.current   = nodes;
@@ -331,9 +326,9 @@ export default function EmotionGraph() {
 
     let lastRender = 0;
     const tick = (ts: number) => {
-      // Throttle to ~15fps when settled and nothing interactive
+      // Throttle to 30fps when idle (still needed to save CPU)
       const isIdle = !simActive.current && !hoveredRef.current && !selectedRef.current;
-      if (isIdle && ts - lastRender < 66) { animRef.current = requestAnimationFrame(tick); return; }
+      if (isIdle && ts - lastRender < 33) { animRef.current = requestAnimationFrame(tick); return; }
       lastRender = ts;
       const W = el.parentElement?.clientWidth  ?? 0;
       const H = el.parentElement?.clientHeight ?? 0;
@@ -439,12 +434,17 @@ export default function EmotionGraph() {
         const [r, g, b] = node.colorRgb;
         const radius = node.radius + (isHov || isSel ? 3 : 0);
 
+        // Persistent subtle breathing — all nodes pulse gently (staggered by id)
+        const breathePhase = ts * 0.0009 + node.id * 0.53;
+        const breatheScale = 1 + (isHov || isSel ? 0.09 : 0.04) * Math.sin(breathePhase);
+
         // Gentle sine-wave float for hovered / selected nodes
         const bobY = (isHov || isSel) && !dimmed
-          ? Math.sin(ts * 0.0014 + node.id * 0.71) * 2.5
+          ? Math.sin(ts * 0.0014 + node.id * 0.71) * 2.8
           : 0;
         const drawX = node.x;
         const drawY = node.y + bobY;
+        const drawR  = radius * breatheScale;
 
         ctx.save();
         ctx.globalAlpha = dimmed ? 0.08 : 1;
@@ -455,16 +455,16 @@ export default function EmotionGraph() {
           ctx.shadowBlur = 0;
           ctx.strokeStyle = `rgba(${r},${g},${b},${((1 - beacon) * 0.55).toFixed(3)})`;
           ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.arc(drawX, drawY, radius + beacon * 28, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(drawX, drawY, drawR + beacon * 28, 0, Math.PI * 2); ctx.stroke();
         }
 
         if (largGraph) {
-          // Minimal flat dot — no shadowBlur, no rings, no specular
+          // Minimal flat dot with breathing scale
           if (isHov || isSel) {
             ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 12;
           }
           ctx.fillStyle = `rgb(${r},${g},${b})`;
-          ctx.beginPath(); ctx.arc(drawX, drawY, radius, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(drawX, drawY, drawR, 0, Math.PI*2); ctx.fill();
           if (isSel) {
             const phase = (ts * 0.0012) % (Math.PI * 2);
             ctx.shadowBlur = 0;
@@ -476,12 +476,12 @@ export default function EmotionGraph() {
           if (!dimmed && node.bpmNorm > 0.38) {
             ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 3;
             ctx.strokeStyle = `rgba(${r},${g},${b},${(node.bpmNorm*0.7).toFixed(2)})`; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(drawX, drawY, radius+5, 0, Math.PI*2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(drawX, drawY, drawR + 5, 0, Math.PI*2); ctx.stroke();
           }
           ctx.shadowColor = `rgb(${r},${g},${b})`;
           ctx.shadowBlur  = dimmed ? 0 : (isHov || isSel ? glow*2.8 : glow);
           ctx.fillStyle   = `rgb(${r},${g},${b})`;
-          ctx.beginPath(); ctx.arc(drawX, drawY, radius, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(drawX, drawY, drawR, 0, Math.PI*2); ctx.fill();
           if (isSel) {
             const phase = (ts * 0.0012) % (Math.PI * 2);
             ctx.shadowBlur = 0;
@@ -490,7 +490,7 @@ export default function EmotionGraph() {
           }
           if (!dimmed) {
             ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.22)';
-            ctx.beginPath(); ctx.arc(drawX - radius*0.28, drawY - radius*0.3, radius*0.4, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(drawX - drawR*0.28, drawY - drawR*0.3, drawR*0.4, 0, Math.PI*2); ctx.fill();
           }
         }
         ctx.restore();

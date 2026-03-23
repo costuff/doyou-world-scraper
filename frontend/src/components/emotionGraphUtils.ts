@@ -8,7 +8,7 @@ export const NEBULA_R   = 215;
 export const ATTRACT    = 0.016;
 export const REPEL      = 1200;
 export const CENTER_PULL = 0.0008;
-export const DAMPING    = 0.72;
+export const DAMPING    = 0.82;
 export const NODE_MIN_R = 4;
 export const NODE_MAX_R = 14;
 
