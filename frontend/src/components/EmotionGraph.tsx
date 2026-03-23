@@ -340,7 +340,13 @@ export default function EmotionGraph() {
       const t = tf.current;
 
       if (simActive.current && nodes.length > 0) {
-        if (!stepSimulation(nodes, poles)) { simActive.current = false; setSettled(true); }
+        // Run multiple steps per frame so large graphs settle faster
+        const stepsPerFrame = nodes.length > 200 ? 4 : nodes.length > 50 ? 2 : 1;
+        let still = false;
+        for (let s = 0; s < stepsPerFrame; s++) {
+          if (!stepSimulation(nodes, poles)) { still = true; break; }
+        }
+        if (still) { simActive.current = false; setSettled(true); }
       }
 
       // Background

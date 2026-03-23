@@ -86,14 +86,18 @@ export default function CurateTab() {
     let cancelled = false;
     async function load() {
       try {
-        const [tracksRes, taxRes] = await Promise.all([
+        const [tracksResult, taxResult] = await Promise.allSettled([
           axios.get(`${ANALYTICS}/api/v1/tracks?limit=500`),
           axios.get(`${ANALYTICS}/api/v1/taxonomy`),
         ]);
         if (cancelled) return;
+        if (tracksResult.status === 'rejected') {
+          throw tracksResult.reason;
+        }
         // Only show tracks that have been analyzed (have audio features in DB)
-        setTracks((tracksRes.data.tracks ?? []).filter((t: any) => t.features != null));
-        setTaxonomy(taxRes.data.nodes ?? []);
+        setTracks((tracksResult.value.data.tracks ?? []).filter((t: any) => t.features != null));
+        // Taxonomy is optional — fall back gracefully if endpoint not yet implemented
+        setTaxonomy(taxResult.status === 'fulfilled' ? (taxResult.value.data.nodes ?? []) : []);
         setLoading(false);
       } catch (err) {
         if (!cancelled) {
