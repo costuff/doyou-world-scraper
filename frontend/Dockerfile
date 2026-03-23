@@ -53,6 +53,14 @@ server {
         proxy_read_timeout 15s;
     }
 
+    # index.html must never be cached so browsers always get the latest hashed asset filenames
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+        try_files \$uri /index.html;
+    }
+
     # Frontend routes
     location / {
         try_files \$uri \$uri/ /index.html;
