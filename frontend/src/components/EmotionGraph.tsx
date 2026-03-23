@@ -332,7 +332,7 @@ export default function EmotionGraph() {
     let lastRender = 0;
     const tick = (ts: number) => {
       // Throttle to ~15fps when settled and nothing interactive
-      const isIdle = !simActive.current && !hoveredRef.current;
+      const isIdle = !simActive.current && !hoveredRef.current && !selectedRef.current;
       if (isIdle && ts - lastRender < 66) { animRef.current = requestAnimationFrame(tick); return; }
       lastRender = ts;
       const W = el.parentElement?.clientWidth  ?? 0;
@@ -370,8 +370,17 @@ export default function EmotionGraph() {
       // Background
       ctx.fillStyle = '#080e1a';
       ctx.fillRect(0, 0, W, H);
+
+      // Layer 0: full-canvas KNN terrain — drawn in screen-space so it always fills edge-to-edge
+      const terrain = terrainRef.current;
+      if (terrain) {
+        ctx.globalAlpha = 0.14;
+        ctx.drawImage(terrain, 0, 0, W, H);
+        ctx.globalAlpha = 1;
+      }
+
       const bgGrd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.min(W,H)*0.75);
-      bgGrd.addColorStop(0, 'rgba(25,35,65,0.6)');
+      bgGrd.addColorStop(0, 'rgba(15,22,50,0.55)');
       bgGrd.addColorStop(1, 'rgba(8,14,26,0)');
       ctx.fillStyle = bgGrd;
       ctx.fillRect(0, 0, W, H);
@@ -379,10 +388,6 @@ export default function EmotionGraph() {
       ctx.save();
       ctx.translate(t.x, t.y);
       ctx.scale(t.scale, t.scale);
-
-      // Layer 1: KNN terrain
-      const terrain = terrainRef.current;
-      if (terrain) ctx.drawImage(terrain, -TERRAIN_WORLD, -TERRAIN_WORLD, TERRAIN_WORLD*2, TERRAIN_WORLD*2);
 
       // Layer 2: Nebula glows
       for (const p of poles) {
@@ -434,32 +439,58 @@ export default function EmotionGraph() {
         const [r, g, b] = node.colorRgb;
         const radius = node.radius + (isHov || isSel ? 3 : 0);
 
+        // Gentle sine-wave float for hovered / selected nodes
+        const bobY = (isHov || isSel) && !dimmed
+          ? Math.sin(ts * 0.0014 + node.id * 0.71) * 2.5
+          : 0;
+        const drawX = node.x;
+        const drawY = node.y + bobY;
+
         ctx.save();
         ctx.globalAlpha = dimmed ? 0.08 : 1;
+
+        // Expanding beacon ring for selected node
+        if (isSel && !dimmed) {
+          const beacon = (ts * 0.0007) % 1;
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = `rgba(${r},${g},${b},${((1 - beacon) * 0.55).toFixed(3)})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(drawX, drawY, radius + beacon * 28, 0, Math.PI * 2); ctx.stroke();
+        }
 
         if (largGraph) {
           // Minimal flat dot — no shadowBlur, no rings, no specular
           if (isHov || isSel) {
-            ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 10;
+            ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 12;
           }
           ctx.fillStyle = `rgb(${r},${g},${b})`;
-          ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI*2); ctx.fill();
-          if (isSel) { ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); }
+          ctx.beginPath(); ctx.arc(drawX, drawY, radius, 0, Math.PI*2); ctx.fill();
+          if (isSel) {
+            const phase = (ts * 0.0012) % (Math.PI * 2);
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = `rgba(255,255,255,${(0.5 + Math.sin(phase) * 0.25).toFixed(3)})`;
+            ctx.lineWidth = 1.5; ctx.stroke();
+          }
         } else {
           const glow = (node.features.energy ?? 0.5) * 20;
           if (!dimmed && node.bpmNorm > 0.38) {
             ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 3;
             ctx.strokeStyle = `rgba(${r},${g},${b},${(node.bpmNorm*0.7).toFixed(2)})`; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(node.x, node.y, radius+5, 0, Math.PI*2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(drawX, drawY, radius+5, 0, Math.PI*2); ctx.stroke();
           }
           ctx.shadowColor = `rgb(${r},${g},${b})`;
-          ctx.shadowBlur  = dimmed ? 0 : (isHov || isSel ? glow*2.2 : glow);
+          ctx.shadowBlur  = dimmed ? 0 : (isHov || isSel ? glow*2.8 : glow);
           ctx.fillStyle   = `rgb(${r},${g},${b})`;
-          ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI*2); ctx.fill();
-          if (isSel) { ctx.shadowBlur = 0; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke(); }
+          ctx.beginPath(); ctx.arc(drawX, drawY, radius, 0, Math.PI*2); ctx.fill();
+          if (isSel) {
+            const phase = (ts * 0.0012) % (Math.PI * 2);
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = `rgba(255,255,255,${(0.5 + Math.sin(phase) * 0.25).toFixed(3)})`;
+            ctx.lineWidth = 1.5; ctx.stroke();
+          }
           if (!dimmed) {
             ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.22)';
-            ctx.beginPath(); ctx.arc(node.x - radius*0.28, node.y - radius*0.3, radius*0.4, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(drawX - radius*0.28, drawY - radius*0.3, radius*0.4, 0, Math.PI*2); ctx.fill();
           }
         }
         ctx.restore();
