@@ -179,6 +179,8 @@ function stepSimulation(nodes: GraphNode[], poles: Pole[]): boolean {
 // ─── Persistent similarity edges ──────────────────────────────────────────────
 
 const EDGE_TOP_K = 3;
+const SIM_MIN_MS = 900;
+const SIM_MAX_MS = 2500;
 
 function buildEdges(nodes: GraphNode[], dims: string[]): Edge[] {
   const edges: Edge[] = [];
@@ -257,6 +259,7 @@ export default function EmotionGraph() {
   const dimsRef     = useRef<string[]>([]);
   const showEdgesRef= useRef(true);
   const simActive   = useRef(true);
+  const simStartRef = useRef(0);
   const animRef     = useRef(0);
   const drag        = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
@@ -297,17 +300,19 @@ export default function EmotionGraph() {
         dimsRef.current = keys;
         const poles = buildPoles(keys);
         const nodes = buildNodes(tracks, emotionsMap, poles);
-        // Pre-run physics silently so nodes appear already settled (no flying animation)
-        for (let i = 0; i < 800; i++) { if (!stepSimulation(nodes, poles)) break; }
+        nodes.forEach(n => {
+          n.vx = (Math.random() - 0.5) * 1.6;
+          n.vy = (Math.random() - 0.5) * 1.6;
+        });
         polesRef.current   = poles;
         nodesRef.current   = nodes;
         edgesRef.current   = buildEdges(nodes, keys);
         terrainRef.current = buildTerrain(poles);
-        simActive.current  = false; // already settled
+        simActive.current  = true;
+        simStartRef.current = performance.now();
         const cont = containerRef.current;
         if (cont) tf.current = { x: cont.clientWidth / 2, y: cont.clientHeight / 2, scale: 1 };
         setCount(nodes.length);
-        setSettled(true);
         setError(null);
       } catch (e: unknown) {
         if (!dead) setError(e instanceof Error ? e.message : 'Failed to load graph data');
@@ -348,13 +353,18 @@ export default function EmotionGraph() {
       const t = tf.current;
 
       if (simActive.current && nodes.length > 0) {
-        // Run multiple steps per frame so large graphs settle faster
-        const stepsPerFrame = nodes.length > 200 ? 8 : nodes.length > 50 ? 4 : 2;
-        let still = false;
-        for (let s = 0; s < stepsPerFrame; s++) {
-          if (!stepSimulation(nodes, poles)) { still = true; break; }
+        const simElapsed = ts - simStartRef.current;
+        // Keep a small, visible movement window, but never exceed ~2.5s
+        if (simElapsed > SIM_MAX_MS) {
+          simActive.current = false; setSettled(true);
+        } else {
+          const stepsPerFrame = nodes.length > 200 ? 2 : 1;
+          let still = false;
+          for (let s = 0; s < stepsPerFrame; s++) {
+            if (!stepSimulation(nodes, poles)) { still = true; break; }
+          }
+          if (still && simElapsed >= SIM_MIN_MS) { simActive.current = false; setSettled(true); }
         }
-        if (still) { simActive.current = false; setSettled(true); }
       }
 
       // Background
@@ -552,6 +562,7 @@ export default function EmotionGraph() {
 
   const rerunSim = useCallback(() => {
     simActive.current = true; setSettled(false);
+    simStartRef.current = performance.now();
     nodesRef.current.forEach(n => { n.vx = (Math.random()-0.5)*5; n.vy = (Math.random()-0.5)*5; });
   }, []);
 
