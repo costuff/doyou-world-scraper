@@ -21,7 +21,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
 import {
-  NEBULA_R, ATTRACT, REPEL, CENTER_PULL, DAMPING,
+  NEBULA_R,
   NODE_MIN_R, NODE_MAX_R, KNOWN_PALETTE,
   clamp01, valenceRgb, cosineSim, buildPoles,
   type Pole,
@@ -137,48 +137,6 @@ function buildNodes(
       bpmNorm,
     };
   });
-}
-
-// ─── Physics step ─────────────────────────────────────────────────────────────
-
-function stepSimulation(nodes: GraphNode[], poles: Pole[]): boolean {
-  let totalKE = 0;
-  const damp = (nodes as any)._dampingOverride ?? DAMPING;
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    let fx = 0, fy = 0;
-
-    for (const p of poles) {
-      const w = n.emotions[p.name] ?? 0;
-      if (w < 0.01) continue;
-      fx += (p.x - n.x) * w * ATTRACT;
-      fy += (p.y - n.y) * w * ATTRACT;
-    }
-
-    for (let j = i + 1; j < nodes.length; j++) {
-      const m = nodes[j];
-      const dx = n.x - m.x, dy = n.y - m.y;
-      const d2 = dx * dx + dy * dy + 1;
-      const d  = Math.sqrt(d2);
-      const minD = n.radius + m.radius + 10;
-      if (d < minD * 3) {
-        const f = REPEL / d2;
-        const nx = dx / d, ny = dy / d;
-        fx += nx * f;   fy += ny * f;
-        m.vx -= nx * f; m.vy -= ny * f;
-      }
-    }
-
-    fx -= n.x * CENTER_PULL;
-    fy -= n.y * CENTER_PULL;
-
-    n.vx = (n.vx + fx) * damp;
-    n.vy = (n.vy + fy) * damp;
-    n.x += n.vx;
-    n.y += n.vy;
-    totalKE += Math.abs(n.vx) + Math.abs(n.vy);
-  }
-  return totalKE / Math.max(1, nodes.length) > 0.03;
 }
 
 // ─── Persistent similarity edges ──────────────────────────────────────────────
