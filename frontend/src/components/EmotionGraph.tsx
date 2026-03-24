@@ -104,19 +104,22 @@ function drawRoundRect(
 function buildNodes(
   tracks: RawTrack[],
   emotionsMap: Map<number, Record<string, number>>,
-  poles: Pole[],
+  _poles: Pole[],
 ): GraphNode[] {
-  return tracks.filter(t => emotionsMap.has(t.id) && t.features != null).map(t => {
+  return tracks.filter(t => emotionsMap.has(t.id) && t.features != null).map((t) => {
     const emotions = emotionsMap.get(t.id)!;
     const f = t.features;
 
-    let sx = 0, sy = 0, tw = 0;
-    poles.forEach(p => { const w = emotions[p.name] ?? 0; sx += p.x * w; sy += p.y * w; tw += w; });
-    const ix = tw > 0 ? sx / tw : 0;
-    const iy = tw > 0 ? sy / tw : 0;
+    // ── Seed: completely random positions across world space (no poles)
+    // Chaotic spread gives natural variety from the start
+    const maxR = TERRAIN_WORLD * 0.85;
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * maxR;
+    const ix = Math.cos(angle) * dist;
+    const iy = Math.sin(angle) * dist;
 
     const raw = t.file_name;
-    const clean = raw.replace(/\s*\[[\w-]+\](\.[^.]+)?$/, '').replace(/\.[^.]+$/, '').trim() || raw;
+    const clean = raw.replace(/\s*\[[\w-]+\](\.\w+)?$/, '').replace(/\.\w+$/, '').trim() || raw;
     const shortName = clean.length > 36 ? clean.slice(0, 35) + '\u2026' : clean;
 
     const energy  = f.energy  ?? 0.5;
@@ -129,11 +132,11 @@ function buildNodes(
       shortName,
       features: f,
       emotions,
-      x:  ix + (Math.random() - 0.5) * 8,
-      y:  iy + (Math.random() - 0.5) * 8,
+      x:  ix + (Math.random() - 0.5) * 16,
+      y:  iy + (Math.random() - 0.5) * 16,
       vx: 0, vy: 0,
       rx: 0, ry: 0,
-      floatPhase: (t.id * 2.399) % (Math.PI * 2),  // golden-angle spread
+      floatPhase: (t.id * 2.399) % (Math.PI * 2),
       radius: NODE_MIN_R + energy * (NODE_MAX_R - NODE_MIN_R),
       colorRgb: valenceRgb(valence),
       bpmNorm,
@@ -145,14 +148,10 @@ function resolveLayout(nodes: GraphNode[]): void {
   const anchors = nodes.map(node => ({ x: node.x, y: node.y }));
   const maxR = TERRAIN_WORLD * 0.84;
 
-  // ── Seed: place each node on a sunflower spiral around its emotion anchor.
-  // Sunflower angle ensures no two nearby indices land on top of each other.
-  nodes.forEach((node, index) => {
-    const angle = index * 2.399; // golden angle ≈ 137.5°
-    const r = 18 + Math.sqrt(index % 80) * 9 + node.radius;
-    node.x = anchors[index].x + Math.cos(angle) * r;
-    node.y = anchors[index].y + Math.sin(angle) * r;
-  });
+  // ── Seed: keep initial random world-space positions as-is
+  // Pure chaos means each node starts somewhere random, then collision relaxation
+  // naturally separates and organizes them. No poles, no structure imposed.
+  // (anchors are already set from buildNodes random seeding)
 
   // ── Phase 1: 250 iterations of pure symmetric collision — zero attraction.
   // Symmetric push (both nodes move) is far more stable than one-sided.
@@ -182,8 +181,8 @@ function resolveLayout(nodes: GraphNode[]): void {
     }
   }
 
-  // ── Phase 2: 60 iterations of light attraction back to emotion anchor + collision.
-  // Gently pulls nodes toward their correct emotion region without re-colliding.
+  // ── Phase 2: 60 iterations of light attraction back to starting position + collision.
+  // Gently pulls nodes toward their initial random positions (no poles, just settling).
   for (let iter = 0; iter < 60; iter++) {
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
@@ -536,22 +535,7 @@ export default function EmotionGraph() {
         ctx.restore();
       }
 
-      // Layer 6: Emotion poles (hidden ones are still used for positioning but not rendered)
-      for (const p of poles) {
-        if (HIDDEN_POLES.has(p.name)) continue;
-        const [r, g, b] = p.rgb;
-        ctx.save();
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 30, 0, Math.PI*2); ctx.stroke();
-        ctx.shadowColor = p.color; ctx.shadowBlur = 35; ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 20, 0, Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.8)';
-        ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-        ctx.font = 'bold 11px system-ui,sans-serif'; ctx.textAlign = 'center';
-        ctx.fillStyle = '#e2e8f0'; ctx.shadowBlur = 0;
-        ctx.fillText(p.name.charAt(0).toUpperCase() + p.name.slice(1), p.x, p.y + 40);
-      }
+      // Layer 6: (poles removed — no emotion nodes displayed)
 
       // Hover tooltip
       if (hov) {
