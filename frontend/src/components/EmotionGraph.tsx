@@ -69,6 +69,8 @@ interface GraphNode {
   emotions: Record<string, number>;
   x: number; vx: number;
   y: number; vy: number;
+  rx: number; ry: number;      // rest position for float mode
+  floatPhase: number;          // unique oscillation phase per node
   radius: number;
   colorRgb: [number, number, number];
   bpmNorm: number;
@@ -100,10 +102,16 @@ function drawRoundRect(
 function buildNodes(
   tracks: RawTrack[],
   emotionsMap: Map<number, Record<string, number>>,
+  poles: Pole[],
 ): GraphNode[] {
   return tracks.filter(t => emotionsMap.has(t.id) && t.features != null).map(t => {
     const emotions = emotionsMap.get(t.id)!;
     const f = t.features;
+
+    let sx = 0, sy = 0, tw = 0;
+    poles.forEach(p => { const w = emotions[p.name] ?? 0; sx += p.x * w; sy += p.y * w; tw += w; });
+    const ix = tw > 0 ? sx / tw : 0;
+    const iy = tw > 0 ? sy / tw : 0;
 
     const raw = t.file_name;
     const clean = raw.replace(/\s*\[[\w-]+\](\.[^.]+)?$/, '').replace(/\.[^.]+$/, '').trim() || raw;
@@ -119,10 +127,12 @@ function buildNodes(
       shortName,
       features: f,
       emotions,
-      // Start near centre — emotion-pole attraction will bloom nodes outward
-      x:  (Math.random() - 0.5) * 50,
-      y:  (Math.random() - 0.5) * 50,
-      vx: 0, vy: 0,
+      x:  ix + (Math.random() - 0.5) * 220,
+      y:  iy + (Math.random() - 0.5) * 220,
+      vx: (Math.random() - 0.5) * 1.2,
+      vy: (Math.random() - 0.5) * 1.2,
+      rx: 0, ry: 0,
+      floatPhase: (t.id * 2.399) % (Math.PI * 2),  // golden-angle spread
       radius: NODE_MIN_R + energy * (NODE_MAX_R - NODE_MIN_R),
       colorRgb: valenceRgb(valence),
       bpmNorm,
@@ -174,8 +184,6 @@ function stepSimulation(nodes: GraphNode[], poles: Pole[]): boolean {
 // ─── Persistent similarity edges ──────────────────────────────────────────────
 
 const EDGE_TOP_K = 3;
-const SIM_MIN_MS = 900;
-const SIM_MAX_MS = 2500;
 
 function buildEdges(nodes: GraphNode[], dims: string[]): Edge[] {
   const edges: Edge[] = [];
@@ -254,6 +262,7 @@ export default function EmotionGraph() {
   const dimsRef     = useRef<string[]>([]);
   const showEdgesRef= useRef(true);
   const simActive   = useRef(true);
+  const floatActive = useRef(false);
   const simStartRef = useRef(0);
   const animRef     = useRef(0);
   const drag        = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0 });
@@ -294,15 +303,12 @@ export default function EmotionGraph() {
         const keys = dims.size > 0 ? [...dims] : Object.keys(KNOWN_PALETTE);
         dimsRef.current = keys;
         const poles = buildPoles(keys);
-        const nodes = buildNodes(tracks, emotionsMap);
-        nodes.forEach(n => {
-          n.vx = (Math.random() - 0.5) * 2.5;
-          n.vy = (Math.random() - 0.5) * 2.5;
-        });
+        const nodes = buildNodes(tracks, emotionsMap, poles);
         polesRef.current   = poles;
         nodesRef.current   = nodes;
         edgesRef.current   = buildEdges(nodes, keys);
         terrainRef.current = buildTerrain(poles);
+        floatActive.current = false;
         simActive.current  = true;
         simStartRef.current = performance.now();
         const cont = containerRef.current;
@@ -326,9 +332,9 @@ export default function EmotionGraph() {
 
     let lastRender = 0;
     const tick = (ts: number) => {
-      // Throttle to 30fps when idle (still needed to save CPU)
-      const isIdle = !simActive.current && !hoveredRef.current && !selectedRef.current;
-      if (isIdle && ts - lastRender < 33) { animRef.current = requestAnimationFrame(tick); return; }
+      // Float mode at 30fps; sim and hover at full 60fps
+      const slowFrame = floatActive.current && !simActive.current && !hoveredRef.current;
+      if (slowFrame && ts - lastRender < 33) { animRef.current = requestAnimationFrame(tick); return; }
       lastRender = ts;
       const W = el.parentElement?.clientWidth  ?? 0;
       const H = el.parentElement?.clientHeight ?? 0;
@@ -348,34 +354,32 @@ export default function EmotionGraph() {
       const t = tf.current;
 
       if (simActive.current && nodes.length > 0) {
-        const simElapsed = ts - simStartRef.current;
-        // Keep a small, visible movement window, but never exceed ~2.5s
-        if (simElapsed > SIM_MAX_MS) {
-          simActive.current = false; setSettled(true);
-        } else {
-          const stepsPerFrame = nodes.length > 200 ? 2 : 1;
-          let still = false;
-          for (let s = 0; s < stepsPerFrame; s++) {
-            if (!stepSimulation(nodes, poles)) { still = true; break; }
-          }
-          if (still && simElapsed >= SIM_MIN_MS) { simActive.current = false; setSettled(true); }
+        const age = ts - simStartRef.current;
+        // One physics step per frame — gentle, smooth
+        const still = !stepSimulation(nodes, poles);
+        // After 3.5s or natural KE decay: record rest positions and start float
+        if (still || age > 3500) {
+          nodes.forEach(n => { n.rx = n.x; n.ry = n.y; });
+          simActive.current = false;
+          floatActive.current = true;
+          setSettled(true);
+        }
+      }
+
+      // Float mode: each bubble gently drifts on its own Lissajous path
+      if (floatActive.current) {
+        const ft = ts * 0.00042;
+        for (const node of nodes) {
+          node.x = node.rx + Math.sin(ft       + node.floatPhase) * 1.6;
+          node.y = node.ry + Math.cos(ft * 0.7 + node.floatPhase * 1.3) * 1.6;
         }
       }
 
       // Background
       ctx.fillStyle = '#080e1a';
       ctx.fillRect(0, 0, W, H);
-
-      // Layer 0: full-canvas KNN terrain — drawn in screen-space so it always fills edge-to-edge
-      const terrain = terrainRef.current;
-      if (terrain) {
-        ctx.globalAlpha = 0.14;
-        ctx.drawImage(terrain, 0, 0, W, H);
-        ctx.globalAlpha = 1;
-      }
-
       const bgGrd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.min(W,H)*0.75);
-      bgGrd.addColorStop(0, 'rgba(15,22,50,0.55)');
+      bgGrd.addColorStop(0, 'rgba(25,35,65,0.6)');
       bgGrd.addColorStop(1, 'rgba(8,14,26,0)');
       ctx.fillStyle = bgGrd;
       ctx.fillRect(0, 0, W, H);
@@ -383,6 +387,10 @@ export default function EmotionGraph() {
       ctx.save();
       ctx.translate(t.x, t.y);
       ctx.scale(t.scale, t.scale);
+
+      // Layer 1: KNN terrain
+      const terrain = terrainRef.current;
+      if (terrain) ctx.drawImage(terrain, -TERRAIN_WORLD, -TERRAIN_WORLD, TERRAIN_WORLD*2, TERRAIN_WORLD*2);
 
       // Layer 2: Nebula glows
       for (const p of poles) {
@@ -424,75 +432,49 @@ export default function EmotionGraph() {
         ctx.setLineDash([]);
       }
 
-      // Layer 5: Song nodes
-      const largGraph = nodes.length > 150;
+      // Layer 5: Song nodes — bubble style (halo + body + specular, no shadowBlur)
       for (const node of nodes) {
         const isHov  = node === hov;
         const isSel  = node === sel;
         const emVal  = flt.emotion ? (node.emotions[flt.emotion] ?? 0) : 1;
         const dimmed = flt.emotion !== null && emVal < flt.threshold;
         const [r, g, b] = node.colorRgb;
-        const radius = node.radius + (isHov || isSel ? 3 : 0);
-
-        // Persistent subtle breathing — all nodes pulse gently (staggered by id)
-        const breathePhase = ts * 0.0009 + node.id * 0.53;
-        const breatheScale = 1 + (isHov || isSel ? 0.09 : 0.04) * Math.sin(breathePhase);
-
-        // Gentle sine-wave float for hovered / selected nodes
-        const bobY = (isHov || isSel) && !dimmed
-          ? Math.sin(ts * 0.0014 + node.id * 0.71) * 2.8
-          : 0;
-        const drawX = node.x;
-        const drawY = node.y + bobY;
-        const drawR  = radius * breatheScale;
+        const radius = node.radius + (isHov || isSel ? 2 : 0);
 
         ctx.save();
-        ctx.globalAlpha = dimmed ? 0.08 : 1;
 
-        // Expanding beacon ring for selected node
-        if (isSel && !dimmed) {
-          const beacon = (ts * 0.0007) % 1;
-          ctx.shadowBlur = 0;
-          ctx.strokeStyle = `rgba(${r},${g},${b},${((1 - beacon) * 0.55).toFixed(3)})`;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.arc(drawX, drawY, drawR + beacon * 28, 0, Math.PI * 2); ctx.stroke();
+        // Soft outer glow / halo
+        ctx.globalAlpha = dimmed ? 0.03 : (isHov ? 0.22 : 0.11);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.beginPath(); ctx.arc(node.x, node.y, radius * 2.8, 0, Math.PI*2); ctx.fill();
+
+        // Main bubble body
+        ctx.globalAlpha = dimmed ? 0.07 : 0.86;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI*2); ctx.fill();
+
+        // Selected ring
+        if (isSel) {
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
         }
 
-        if (largGraph) {
-          // Minimal flat dot with breathing scale
-          if (isHov || isSel) {
-            ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 12;
-          }
-          ctx.fillStyle = `rgb(${r},${g},${b})`;
-          ctx.beginPath(); ctx.arc(drawX, drawY, drawR, 0, Math.PI*2); ctx.fill();
-          if (isSel) {
-            const phase = (ts * 0.0012) % (Math.PI * 2);
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = `rgba(255,255,255,${(0.5 + Math.sin(phase) * 0.25).toFixed(3)})`;
-            ctx.lineWidth = 1.5; ctx.stroke();
-          }
-        } else {
-          const glow = (node.features.energy ?? 0.5) * 20;
-          if (!dimmed && node.bpmNorm > 0.38) {
-            ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = 3;
-            ctx.strokeStyle = `rgba(${r},${g},${b},${(node.bpmNorm*0.7).toFixed(2)})`; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(drawX, drawY, drawR + 5, 0, Math.PI*2); ctx.stroke();
-          }
-          ctx.shadowColor = `rgb(${r},${g},${b})`;
-          ctx.shadowBlur  = dimmed ? 0 : (isHov || isSel ? glow*2.8 : glow);
-          ctx.fillStyle   = `rgb(${r},${g},${b})`;
-          ctx.beginPath(); ctx.arc(drawX, drawY, drawR, 0, Math.PI*2); ctx.fill();
-          if (isSel) {
-            const phase = (ts * 0.0012) % (Math.PI * 2);
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = `rgba(255,255,255,${(0.5 + Math.sin(phase) * 0.25).toFixed(3)})`;
-            ctx.lineWidth = 1.5; ctx.stroke();
-          }
-          if (!dimmed) {
-            ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.22)';
-            ctx.beginPath(); ctx.arc(drawX - drawR*0.28, drawY - drawR*0.3, drawR*0.4, 0, Math.PI*2); ctx.fill();
-          }
+        // Hover ring
+        if (isHov && !isSel) {
+          ctx.globalAlpha = 0.55;
+          ctx.strokeStyle = `rgb(${r},${g},${b})`; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(node.x, node.y, radius + 5, 0, Math.PI*2); ctx.stroke();
         }
+
+        // Specular glint (top-left highlight gives 3-D bubble feel)
+        if (!dimmed) {
+          ctx.globalAlpha = 0.30;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(node.x - radius*0.28, node.y - radius*0.30, radius*0.40, 0, Math.PI*2);
+          ctx.fill();
+        }
+
         ctx.restore();
       }
 
@@ -592,9 +574,14 @@ export default function EmotionGraph() {
   }, []);
 
   const rerunSim = useCallback(() => {
-    simActive.current = true; setSettled(false);
+    floatActive.current = false;
+    simActive.current = true;
     simStartRef.current = performance.now();
-    nodesRef.current.forEach(n => { n.vx = (Math.random()-0.5)*5; n.vy = (Math.random()-0.5)*5; });
+    setSettled(false);
+    nodesRef.current.forEach(n => {
+      n.vx = (Math.random() - 0.5) * 2;
+      n.vy = (Math.random() - 0.5) * 2;
+    });
   }, []);
 
   const poles = polesRef.current;
