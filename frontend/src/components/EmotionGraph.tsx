@@ -141,55 +141,61 @@ function buildNodes(
 
 function resolveLayout(nodes: GraphNode[]): void {
   const anchors = nodes.map(node => ({ x: node.x, y: node.y }));
-
-  // Seed each node on a small deterministic spiral around its anchor so dense
-  // clusters have room to separate before iterative relaxation.
+  const maxRadius = TERRAIN_WORLD * 0.78;
+  
+  // Seed each node on a small deterministic spiral around its anchor
   nodes.forEach((node, index) => {
-    const seedRadius = 16 + (index % 9) * 4 + node.radius * 0.8;
+    const seedRadius = 20 + (index % 12) * 5 + node.radius * 1.2;
     node.x = anchors[index].x + Math.cos(node.floatPhase) * seedRadius;
     node.y = anchors[index].y + Math.sin(node.floatPhase) * seedRadius;
   });
 
-  const maxRadius = TERRAIN_WORLD * 0.78;
-  for (let iter = 0; iter < 140; iter++) {
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
-      const anchor = anchors[i];
+  // Multi-phase relaxation: aggressive collision then gradual settle
+  const phases = [
+    { iters: 60, repel: 0.8, attract: 0.02 },   // Phase 1: aggressive separation
+    { iters: 40, repel: 0.6, attract: 0.05 },   // Phase 2: medium separation
+    { iters: 40, repel: 0.4, attract: 0.08 },   // Phase 3: gentle settle
+  ];
 
-      node.x += (anchor.x - node.x) * 0.09;
-      node.y += (anchor.y - node.y) * 0.09;
+  for (const phase of phases) {
+    for (let iter = 0; iter < phase.iters; iter++) {
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const anchor = anchors[i];
+        
+        // Attraction to anchor
+        node.x += (anchor.x - node.x) * phase.attract;
+        node.y += (anchor.y - node.y) * phase.attract;
 
-      for (let j = i + 1; j < nodes.length; j++) {
-        const other = nodes[j];
-        const dx = node.x - other.x;
-        const dy = node.y - other.y;
-        const minD = node.radius + other.radius + 5;
-        const d2 = dx * dx + dy * dy;
-
-        if (d2 === 0) {
-          const nudge = 0.5;
-          node.x += nudge;
-          other.x -= nudge;
-          continue;
+        // Collision repulsion with all others
+        for (let j = 0; j < nodes.length; j++) {
+          if (i === j) continue;
+          const other = nodes[j];
+          const dx = node.x - other.x;
+          const dy = node.y - other.y;
+          const d2 = dx * dx + dy * dy;
+          
+          if (d2 < 0.01) continue; // skip if coincident
+          
+          const minD = node.radius + other.radius + 8;
+          if (d2 < minD * minD) {
+            const d = Math.sqrt(d2);
+            const overlap = minD - d;
+            const repulsion = overlap * phase.repel;
+            const nx = dx / d;
+            const ny = dy / d;
+            node.x += nx * repulsion;
+            node.y += ny * repulsion;
+          }
         }
-
-        if (d2 < minD * minD) {
-          const d = Math.sqrt(d2);
-          const overlap = (minD - d) * 0.5;
-          const nx = dx / d;
-          const ny = dy / d;
-          node.x += nx * overlap;
-          node.y += ny * overlap;
-          other.x -= nx * overlap;
-          other.y -= ny * overlap;
+        
+        // Clamp to boundary
+        const dist = Math.sqrt(node.x * node.x + node.y * node.y);
+        if (dist > maxRadius) {
+          const scale = maxRadius / dist;
+          node.x *= scale;
+          node.y *= scale;
         }
-      }
-
-      const dist = Math.sqrt(node.x * node.x + node.y * node.y);
-      if (dist > maxRadius) {
-        const scale = maxRadius / dist;
-        node.x *= scale;
-        node.y *= scale;
       }
     }
   }
@@ -200,6 +206,56 @@ function resolveLayout(nodes: GraphNode[]): void {
     node.vx = 0;
     node.vy = 0;
   });
+}
+
+// Relax layout around a specific node (for interactive dragging)
+function relaxLayoutAround(nodes: GraphNode[], draggedIndex: number, iterations: number = 20): void {
+  const maxRadius = TERRAIN_WORLD * 0.78;
+  
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (i === draggedIndex) continue; // dragged node is fixed by user
+      
+      let fx = 0, fy = 0;
+      
+      for (let j = 0; j < nodes.length; j++) {
+        if (i === j) continue;
+        const other = nodes[j];
+        const dx = node.x - other.x;
+        const dy = node.y - other.y;
+        const d2 = dx * dx + dy * dy;
+        
+        if (d2 < 0.01) continue;
+        
+        const minD = node.radius + other.radius + 8;
+        if (d2 < minD * minD) {
+          const d = Math.sqrt(d2);
+          const overlap = minD - d;
+          const repulsion = overlap * (j === draggedIndex ? 1.2 : 0.6); // stronger push from dragged
+          const nx = dx / d;
+          const ny = dy / d;
+          fx += nx * repulsion;
+          fy += ny * repulsion;
+        }
+      }
+      
+      node.x += fx;
+      node.y += fy;
+      
+      // Soften attract to rest position (let it float a bit)
+      node.rx += (node.x - node.rx) * 0.1;
+      node.ry += (node.y - node.ry) * 0.1;
+      
+      // Clamp to boundary
+      const dist = Math.sqrt(node.x * node.x + node.y * node.y);
+      if (dist > maxRadius) {
+        const scale = maxRadius / dist;
+        node.x *= scale;
+        node.y *= scale;
+      }
+    }
+  }
 }
 
 // ─── Persistent similarity edges ──────────────────────────────────────────────
@@ -286,7 +342,7 @@ export default function EmotionGraph() {
   const floatActive = useRef(false);
   const revealStartRef = useRef(0);
   const animRef     = useRef(0);
-  const drag        = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  const drag        = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });
 
   useEffect(() => { filterRef.current   = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
@@ -569,30 +625,77 @@ export default function EmotionGraph() {
   }, []);
 
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (drag.current.on) {
-      const d = drag.current;
+    const d = drag.current;
+    const w = toWorld(e.clientX, e.clientY);
+    
+    if (d.on && d.nodeOn) {
+      // Dragging a node: move it and relax nearby nodes
+      const node = nodesRef.current[d.nodeIdx];
+      if (node) {
+        node.x = w.x;
+        node.y = w.y;
+        // Update rest position too so it stays in place when released
+        node.rx = w.x;
+        node.ry = w.y;
+        // Dynamically adjust the layout around the dragged node
+        relaxLayoutAround(nodesRef.current, d.nodeIdx, 8);
+        floatActive.current = false; // pause float while dragging
+      }
+      return;
+    }
+    
+    if (d.on) {
+      // Panning the view
       tf.current = { ...tf.current, x: d.ox + e.clientX - d.sx, y: d.oy + e.clientY - d.sy };
       return;
     }
-    const w = toWorld(e.clientX, e.clientY);
+    
     hoveredRef.current = hitTest(w.x, w.y);
-    canvasRef.current!.style.cursor = hoveredRef.current ? 'pointer' : 'grab';
+    canvasRef.current!.style.cursor = hoveredRef.current ? 'grab' : 'grab';
   }, [toWorld, hitTest]);
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    drag.current = { on: true, sx: e.clientX, sy: e.clientY, ox: tf.current.x, oy: tf.current.y };
-    canvasRef.current!.style.cursor = 'grabbing';
-  }, []);
+    const w = toWorld(e.clientX, e.clientY);
+    const node = hitTest(w.x, w.y);
+    
+    if (e.button === 0 && node) {
+      // Left-click on node: drag the node itself
+      drag.current = { 
+        on: true, sx: e.clientX, sy: e.clientY, ox: 0, oy: 0,
+        nodeOn: true, nodeIdx: nodesRef.current.indexOf(node), lastX: w.x, lastY: w.y 
+      };
+      canvasRef.current!.style.cursor = 'grabbing';
+    } else if (e.button === 0) {
+      // Left-click on empty space: pan
+      drag.current = { 
+        on: true, sx: e.clientX, sy: e.clientY, ox: tf.current.x, oy: tf.current.y,
+        nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0
+      };
+      canvasRef.current!.style.cursor = 'grabbing';
+    }
+  }, [toWorld, hitTest]);
 
   const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const d = drag.current;
     const moved = Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4;
+    
+    if (d.nodeOn) {
+      // Released a dragged node — resume float mode
+      drag.current.on = false;
+      drag.current.nodeOn = false;
+      floatActive.current = false; // let it settle back to gentle float
+      revealStartRef.current = 0;
+      return;
+    }
+    
     drag.current.on = false;
     canvasRef.current!.style.cursor = 'grab';
+    
     if (!moved) {
+      // Small click: select node
       const w = toWorld(e.clientX, e.clientY);
       const node = hitTest(w.x, w.y);
-      setSelected(prev => prev?.id === node?.id ? null : node ?? null);
+      setSelected((prev: GraphNode | null) => prev?.id === node?.id ? null : node ?? null);
     }
   }, [toWorld, hitTest]);
 
