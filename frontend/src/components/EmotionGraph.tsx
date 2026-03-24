@@ -243,10 +243,6 @@ function relaxLayoutAround(nodes: GraphNode[], draggedIndex: number, iterations:
       node.x += fx;
       node.y += fy;
       
-      // Soften attract to rest position (let it float a bit)
-      node.rx += (node.x - node.rx) * 0.1;
-      node.ry += (node.y - node.ry) * 0.1;
-      
       // Clamp to boundary
       const dist = Math.sqrt(node.x * node.x + node.y * node.y);
       if (dist > maxRadius) {
@@ -680,11 +676,15 @@ export default function EmotionGraph() {
     const moved = Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4;
     
     if (d.nodeOn) {
-      // Released a dragged node — resume float mode
+      // Released a dragged node — lock new position as rest point and resume float
+      const node = nodesRef.current[d.nodeIdx];
+      if (node) {
+        node.rx = node.x;
+        node.ry = node.y;
+      }
       drag.current.on = false;
       drag.current.nodeOn = false;
-      floatActive.current = false; // let it settle back to gentle float
-      revealStartRef.current = 0;
+      floatActive.current = true; // resume gentle float around new position
       return;
     }
     
