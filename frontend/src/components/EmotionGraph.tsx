@@ -21,13 +21,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import axios from 'axios';
 import {
-  NEBULA_R,
   NODE_MIN_R, NODE_MAX_R, KNOWN_PALETTE,
   clamp01, valenceRgb, cosineSim, buildPoles,
   type Pole,
 } from './emotionGraphUtils';
 
 const ANALYTICS = import.meta.env.VITE_ANALYTICS_API_URL || '/analytics-api';
+
+// Poles hidden from the canvas and sidebar until a UX is designed for them
+const HIDDEN_POLES = new Set(['tension', 'power', 'melancholy']);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -287,33 +289,7 @@ function buildEdges(nodes: GraphNode[], dims: string[]): Edge[] {
 // Each pixel = weighted mean of pole colours, weight = 1 / d^2.2
 // Gives a smooth Voronoi-like "emotion territory" background.
 
-const TERRAIN_PIXEL = 256;
 const TERRAIN_WORLD = 1100;  // half-extent; poles sit at r≈310; enlarged for 650+ nodes
-
-function buildTerrain(poles: Pole[]): HTMLCanvasElement {
-  const offscreen = document.createElement('canvas');
-  offscreen.width = offscreen.height = TERRAIN_PIXEL;
-  const ctx = offscreen.getContext('2d')!;
-  const imgData = ctx.createImageData(TERRAIN_PIXEL, TERRAIN_PIXEL);
-  const data = imgData.data;
-  for (let py = 0; py < TERRAIN_PIXEL; py++) {
-    for (let px = 0; px < TERRAIN_PIXEL; px++) {
-      const wx = ((px / TERRAIN_PIXEL) - 0.5) * TERRAIN_WORLD * 2;
-      const wy = ((py / TERRAIN_PIXEL) - 0.5) * TERRAIN_WORLD * 2;
-      let totalW = 0, r = 0, g = 0, b = 0;
-      for (const p of poles) {
-        const dx = wx - p.x, dy = wy - p.y;
-        const w  = 1 / (Math.pow(Math.sqrt(dx*dx + dy*dy), 2.2) + 15);
-        totalW += w; r += p.rgb[0] * w; g += p.rgb[1] * w; b += p.rgb[2] * w;
-      }
-      const idx = (py * TERRAIN_PIXEL + px) * 4;
-      data[idx] = r / totalW; data[idx+1] = g / totalW;
-      data[idx+2] = b / totalW; data[idx+3] = 30;
-    }
-  }
-  ctx.putImageData(imgData, 0, 0);
-  return offscreen;
-}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -324,40 +300,42 @@ export default function EmotionGraph() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
   const [nodeCount, setCount]     = useState(0);
-  const [selected, setSelected]   = useState<GraphNode | null>(null);
+  // Multi-select: focused = node shown in sidebar detail; selectedIds = all highlighted nodes
+  const [focused, setFocused]     = useState<GraphNode | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedLabel, setSelectedLabel] = useState<{ label_path: string[]; auto_label_path: string[] } | null>(null);
   const [filterEmotion, setFE]    = useState<string | null>(null);
   const [threshold, setThresh]    = useState(0.5);
   const [settled, setSettled]     = useState(false);
   const [showEdges, setShowEdges] = useState(true);
 
-  const nodesRef    = useRef<GraphNode[]>([]);
-  const polesRef    = useRef<Pole[]>([]);
-  const edgesRef    = useRef<Edge[]>([]);
-  const terrainRef  = useRef<HTMLCanvasElement | null>(null);
-  const tf          = useRef({ x: 0, y: 0, scale: 1 });
-  const hoveredRef  = useRef<GraphNode | null>(null);
-  const selectedRef = useRef<GraphNode | null>(null);
-  const filterRef   = useRef<{ emotion: string | null; threshold: number }>({ emotion: null, threshold: 0.5 });
-  const dimsRef     = useRef<string[]>([]);
-  const showEdgesRef= useRef(true);
-  const simActive   = useRef(false);
-  const floatActive = useRef(false);
+  const nodesRef       = useRef<GraphNode[]>([]);
+  const polesRef       = useRef<Pole[]>([]);
+  const edgesRef       = useRef<Edge[]>([]);
+  const tf             = useRef({ x: 0, y: 0, scale: 1 });
+  const hoveredRef     = useRef<GraphNode | null>(null);
+  const focusedRef     = useRef<GraphNode | null>(null);
+  const selectedIdsRef = useRef<Set<number>>(new Set());
+  const filterRef      = useRef<{ emotion: string | null; threshold: number }>({ emotion: null, threshold: 0.5 });
+  const dimsRef        = useRef<string[]>([]);
+  const showEdgesRef   = useRef(true);
+  const simActive      = useRef(false);
+  const floatActive    = useRef(false);
   const revealStartRef = useRef(0);
-  const animRef     = useRef(0);
-  const drag        = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });
+  const animRef        = useRef(0);
+  const drag           = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });
 
-  useEffect(() => { filterRef.current   = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
-  useEffect(() => { selectedRef.current = selected; }, [selected]);
+  useEffect(() => { filterRef.current    = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
+  useEffect(() => { focusedRef.current   = focused; }, [focused]);
   useEffect(() => { showEdgesRef.current = showEdges; }, [showEdges]);
 
-  // Fetch label whenever a node is selected
+  // Fetch label whenever focused node changes
   useEffect(() => {
-    if (!selected) { setSelectedLabel(null); return; }
-    axios.get(`${ANALYTICS}/api/v1/tracks/${selected.id}/label`)
+    if (!focused) { setSelectedLabel(null); return; }
+    axios.get(`${ANALYTICS}/api/v1/tracks/${focused.id}/label`)
       .then(r => setSelectedLabel(r.data))
       .catch(() => setSelectedLabel(null));
-  }, [selected?.id]);
+  }, [focused?.id]);
 
   // ── Fetch data ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -388,7 +366,6 @@ export default function EmotionGraph() {
         polesRef.current   = poles;
         nodesRef.current   = nodes;
         edgesRef.current   = buildEdges(nodes, keys);
-        terrainRef.current = buildTerrain(poles);
         floatActive.current = false;
         simActive.current  = false;
         revealStartRef.current = performance.now();
@@ -450,46 +427,38 @@ export default function EmotionGraph() {
         }
       }
 
-      // Background
+      // ── Background: dark base ──────────────────────────────────────────
       ctx.fillStyle = '#080e1a';
       ctx.fillRect(0, 0, W, H);
-      const bgGrd = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.min(W,H)*0.75);
-      bgGrd.addColorStop(0, 'rgba(25,35,65,0.6)');
-      bgGrd.addColorStop(1, 'rgba(8,14,26,0)');
-      ctx.fillStyle = bgGrd;
-      ctx.fillRect(0, 0, W, H);
+
+      // ── Screen-space emotion blobs — fill entire canvas at any zoom/pan ──
+      // Each visible pole projects to a screen position and radiates a colour
+      // blob large enough to always bleed past the screen edges.
+      const bgFade = Math.min(1, revealAge / 1200);
+      if (bgFade > 0) {
+        for (const p of poles) {
+          if (HIDDEN_POLES.has(p.name)) continue;
+          const [r, g, b] = p.rgb;
+          const sx = t.x + p.x * t.scale;
+          const sy = t.y + p.y * t.scale;
+          const blobR = Math.max(W, H) * 1.6;
+          const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, blobR);
+          grd.addColorStop(0,    `rgba(${r},${g},${b},${(0.14 * bgFade).toFixed(3)})`);
+          grd.addColorStop(0.4,  `rgba(${r},${g},${b},${(0.05 * bgFade).toFixed(3)})`);
+          grd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
+          ctx.fillStyle = grd;
+          ctx.fillRect(0, 0, W, H);
+        }
+      }
 
       ctx.save();
       ctx.translate(t.x, t.y);
       ctx.scale(t.scale, t.scale);
 
-      // Layer 1: KNN terrain
-      const terrain = terrainRef.current;
-      if (terrain) {
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, revealAge / 900);
-        ctx.drawImage(terrain, -TERRAIN_WORLD, -TERRAIN_WORLD, TERRAIN_WORLD*2, TERRAIN_WORLD*2);
-        ctx.restore();
-      }
-
-      // Layer 2: Nebula glows
-      for (const p of poles) {
-        const [r, g, b] = p.rgb;
-        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, NEBULA_R);
-        grd.addColorStop(0,    `rgba(${r},${g},${b},0.11)`);
-        grd.addColorStop(0.45, `rgba(${r},${g},${b},0.04)`);
-        grd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, revealAge / 1100);
-        ctx.fillStyle = grd;
-        ctx.beginPath(); ctx.arc(p.x, p.y, NEBULA_R, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-      }
-
       const hov  = hoveredRef.current;
-      const sel  = selectedRef.current;
       const flt  = filterRef.current;
       const dims = dimsRef.current;
+      const selIds = selectedIdsRef.current;
 
       // Layer 3: Persistent similarity edges — always visible
       if (showEdgesRef.current && edges.length > 0) {
@@ -520,7 +489,7 @@ export default function EmotionGraph() {
       for (let index = 0; index < nodes.length; index++) {
         const node = nodes[index];
         const isHov  = node === hov;
-        const isSel  = node === sel;
+        const isSel  = selIds.has(node.id);
         const emVal  = flt.emotion ? (node.emotions[flt.emotion] ?? 0) : 1;
         const dimmed = flt.emotion !== null && emVal < flt.threshold;
         const [r, g, b] = node.colorRgb;
@@ -567,8 +536,9 @@ export default function EmotionGraph() {
         ctx.restore();
       }
 
-      // Layer 6: Emotion poles
+      // Layer 6: Emotion poles (hidden ones are still used for positioning but not rendered)
       for (const p of poles) {
+        if (HIDDEN_POLES.has(p.name)) continue;
         const [r, g, b] = p.rgb;
         ctx.save();
         ctx.strokeStyle = `rgba(${r},${g},${b},0.3)`; ctx.lineWidth = 1;
@@ -635,14 +605,13 @@ export default function EmotionGraph() {
       // Dragging a node: move it and relax nearby nodes
       const node = nodesRef.current[d.nodeIdx];
       if (node) {
+        // rx/ry = drag position so the float loop (node.x = rx + sin) follows the cursor
         node.x = w.x;
         node.y = w.y;
-        // Update rest position too so it stays in place when released
         node.rx = w.x;
         node.ry = w.y;
-        // Dynamically adjust the layout around the dragged node
+        // Push nearby nodes out of the way
         relaxLayoutAround(nodesRef.current, d.nodeIdx, 8);
-        floatActive.current = false; // pause float while dragging
       }
       return;
     }
@@ -681,28 +650,44 @@ export default function EmotionGraph() {
   const onMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const d = drag.current;
     const moved = Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4;
-    
-    if (d.nodeOn) {
-      // Released a dragged node — lock new position as rest point and resume float
-      const node = nodesRef.current[d.nodeIdx];
-      if (node) {
-        node.rx = node.x;
-        node.ry = node.y;
-      }
-      drag.current.on = false;
-      drag.current.nodeOn = false;
-      floatActive.current = true; // resume gentle float around new position
-      return;
-    }
-    
+    const wasNodeDrag = d.nodeOn;
+    const nodeIdx = d.nodeIdx;
+
     drag.current.on = false;
+    drag.current.nodeOn = false;
     canvasRef.current!.style.cursor = 'grab';
-    
+
     if (!moved) {
-      // Small click: select node
+      // Click (no movement) — handle selection
       const w = toWorld(e.clientX, e.clientY);
-      const node = hitTest(w.x, w.y);
-      setSelected((prev: GraphNode | null) => prev?.id === node?.id ? null : node ?? null);
+      const node = wasNodeDrag ? nodesRef.current[nodeIdx] : hitTest(w.x, w.y);
+
+      if (node) {
+        // Toggle this node in the selection set
+        const next = new Set(selectedIdsRef.current);
+        if (next.has(node.id)) {
+          next.delete(node.id);
+          // If we deselected the focused node, focus another selected one
+          if (focusedRef.current?.id === node.id) {
+            const remaining = nodesRef.current.filter(n => next.has(n.id));
+            const nxt = remaining[remaining.length - 1] ?? null;
+            focusedRef.current = nxt;
+            setFocused(nxt);
+          }
+        } else {
+          next.add(node.id);
+          focusedRef.current = node;
+          setFocused(node);
+        }
+        selectedIdsRef.current = next;
+        setSelectedIds(new Set(next));
+      } else {
+        // Click empty space — clear all selection
+        selectedIdsRef.current = new Set();
+        setSelectedIds(new Set());
+        focusedRef.current = null;
+        setFocused(null);
+      }
     }
   }, [toWorld, hitTest]);
 
@@ -718,7 +703,14 @@ export default function EmotionGraph() {
     simActive.current = false;
     revealStartRef.current = performance.now();
     setSettled(false);
-    nodesRef.current.forEach(n => { n.x = n.rx; n.y = n.ry; });
+    nodesRef.current.forEach((n: GraphNode) => { n.x = n.rx; n.y = n.ry; });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    selectedIdsRef.current = new Set();
+    setSelectedIds(new Set());
+    focusedRef.current = null;
+    setFocused(null);
   }, []);
 
   const poles = polesRef.current;
@@ -756,7 +748,7 @@ export default function EmotionGraph() {
             className={`w-full text-left px-3 py-1.5 rounded text-xs transition ${filterEmotion === null ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}>
             All ({nodeCount})
           </button>
-          {poles.map(p => (
+          {poles.filter(p => !HIDDEN_POLES.has(p.name)).map(p => (
             <button key={p.name} onClick={() => setFE(filterEmotion === p.name ? null : p.name)}
               className={`w-full text-left px-3 py-1.5 rounded text-xs transition flex items-center gap-2 ${filterEmotion === p.name ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}>
               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
@@ -818,23 +810,46 @@ export default function EmotionGraph() {
           </div>
         )}
         <div className="absolute bottom-3 right-4 text-slate-700 text-xs pointer-events-none select-none">
-          Scroll = zoom · Drag = pan · Click = details
+          Scroll = zoom · Drag canvas = pan · Drag node = move · Click = select/deselect
         </div>
       </div>
 
-      {/* ── Right sidebar: selected node ─────────────────────────────────── */}
-      {selected && (
+      {/* ── Right sidebar: selected node(s) ──────────────────────────────── */}
+      {(focused || selectedIds.size > 0) && (
         <div className="w-68 min-w-64 bg-[#0d1424] border-l border-slate-800 flex flex-col flex-shrink-0 overflow-y-auto">
+          {/* Selection header */}
+          <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between gap-2">
+            <span className="text-slate-500 text-xs">
+              {selectedIds.size === 1 ? '1 track selected' : `${selectedIds.size} tracks selected`}
+            </span>
+            <button onClick={clearSelection}
+              className="text-slate-600 hover:text-slate-300 text-xs transition">Clear all</button>
+          </div>
+          {/* Multi-select track list (when more than 1) */}
+          {selectedIds.size > 1 && (
+            <div className="border-b border-slate-800 max-h-36 overflow-y-auto">
+              {nodesRef.current.filter(n => selectedIds.has(n.id)).map(n => (
+                <button key={n.id}
+                  onClick={() => { focusedRef.current = n; setFocused(n); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs transition flex items-center gap-2 ${
+                    focused?.id === n.id ? 'bg-slate-700/60 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}>
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-white/40" />
+                  <span className="truncate">{n.shortName}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {focused && (
+            <>
           <div className="px-4 py-3 border-b border-slate-800 flex justify-between items-start gap-2">
-            <p className="text-white text-sm font-semibold leading-snug">{selected.shortName}</p>
-            <button onClick={() => setSelected(null)}
-              className="text-slate-600 hover:text-white text-xl leading-none flex-shrink-0">×</button>
+            <p className="text-white text-sm font-semibold leading-snug">{focused.shortName}</p>
           </div>
           <div className="px-4 py-3 border-b border-slate-800">
             <p className="text-slate-600 text-xs uppercase tracking-widest mb-3">Emotions</p>
             <div className="space-y-2">
               {poles.map(p => {
-                const v = selected.emotions[p.name] ?? 0;
+                const v = focused.emotions[p.name] ?? 0;
                 return (
                   <div key={p.name}>
                     <div className="flex justify-between text-xs mb-0.5">
@@ -874,7 +889,7 @@ export default function EmotionGraph() {
           <div className="px-4 py-3">
             <p className="text-slate-600 text-xs uppercase tracking-widest mb-3">Audio Features</p>
             <div className="space-y-1.5">
-              {Object.entries(selected.features)
+              {Object.entries(focused.features)
                 .filter(([, v]) => v !== null && v !== undefined)
                 .map(([k, v]) => {
                   const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -895,6 +910,8 @@ export default function EmotionGraph() {
                 })}
             </div>
           </div>
+            </>
+          )}
         </div>
       )}
     </div>
