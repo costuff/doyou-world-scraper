@@ -141,62 +141,69 @@ function buildNodes(
 
 function resolveLayout(nodes: GraphNode[]): void {
   const anchors = nodes.map(node => ({ x: node.x, y: node.y }));
-  const maxRadius = TERRAIN_WORLD * 0.78;
-  
-  // Seed each node on a small deterministic spiral around its anchor
+  const maxR = TERRAIN_WORLD * 0.84;
+
+  // ── Seed: place each node on a sunflower spiral around its emotion anchor.
+  // Sunflower angle ensures no two nearby indices land on top of each other.
   nodes.forEach((node, index) => {
-    const seedRadius = 20 + (index % 12) * 5 + node.radius * 1.2;
-    node.x = anchors[index].x + Math.cos(node.floatPhase) * seedRadius;
-    node.y = anchors[index].y + Math.sin(node.floatPhase) * seedRadius;
+    const angle = index * 2.399; // golden angle ≈ 137.5°
+    const r = 18 + Math.sqrt(index % 80) * 9 + node.radius;
+    node.x = anchors[index].x + Math.cos(angle) * r;
+    node.y = anchors[index].y + Math.sin(angle) * r;
   });
 
-  // Multi-phase relaxation: aggressive collision then gradual settle
-  const phases = [
-    { iters: 60, repel: 0.8, attract: 0.02 },   // Phase 1: aggressive separation
-    { iters: 40, repel: 0.6, attract: 0.05 },   // Phase 2: medium separation
-    { iters: 40, repel: 0.4, attract: 0.08 },   // Phase 3: gentle settle
-  ];
-
-  for (const phase of phases) {
-    for (let iter = 0; iter < phase.iters; iter++) {
-      for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        const anchor = anchors[i];
-        
-        // Attraction to anchor
-        node.x += (anchor.x - node.x) * phase.attract;
-        node.y += (anchor.y - node.y) * phase.attract;
-
-        // Collision repulsion with all others
-        for (let j = 0; j < nodes.length; j++) {
-          if (i === j) continue;
-          const other = nodes[j];
-          const dx = node.x - other.x;
-          const dy = node.y - other.y;
-          const d2 = dx * dx + dy * dy;
-          
-          if (d2 < 0.01) continue; // skip if coincident
-          
-          const minD = node.radius + other.radius + 8;
-          if (d2 < minD * minD) {
-            const d = Math.sqrt(d2);
-            const overlap = minD - d;
-            const repulsion = overlap * phase.repel;
-            const nx = dx / d;
-            const ny = dy / d;
-            node.x += nx * repulsion;
-            node.y += ny * repulsion;
-          }
-        }
-        
-        // Clamp to boundary
-        const dist = Math.sqrt(node.x * node.x + node.y * node.y);
-        if (dist > maxRadius) {
-          const scale = maxRadius / dist;
-          node.x *= scale;
-          node.y *= scale;
+  // ── Phase 1: 250 iterations of pure symmetric collision — zero attraction.
+  // Symmetric push (both nodes move) is far more stable than one-sided.
+  // Gap = 22px so body + halo never overlap: avg halo radius is 9×2.8 = 25px,
+  // so two average halos clear with 22px body gap.
+  for (let iter = 0; iter < 250; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 0.0001) { a.x += 1.5; b.x -= 1.5; continue; }
+        const minD = a.radius + b.radius + 22;
+        if (d2 < minD * minD) {
+          const d = Math.sqrt(d2);
+          const push = (minD - d) * 0.5;
+          const nx = dx / d, ny = dy / d;
+          a.x += nx * push; a.y += ny * push;
+          b.x -= nx * push; b.y -= ny * push;
         }
       }
+      // Clamp to world boundary
+      const d = Math.sqrt(a.x * a.x + a.y * a.y);
+      if (d > maxR) { a.x *= maxR / d; a.y *= maxR / d; }
+    }
+  }
+
+  // ── Phase 2: 60 iterations of light attraction back to emotion anchor + collision.
+  // Gently pulls nodes toward their correct emotion region without re-colliding.
+  for (let iter = 0; iter < 60; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      a.x += (anchors[i].x - a.x) * 0.012;
+      a.y += (anchors[i].y - a.y) * 0.012;
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 0.0001) { a.x += 0.8; b.x -= 0.8; continue; }
+        const minD = a.radius + b.radius + 22;
+        if (d2 < minD * minD) {
+          const d = Math.sqrt(d2);
+          const push = (minD - d) * 0.5;
+          const nx = dx / d, ny = dy / d;
+          a.x += nx * push; a.y += ny * push;
+          b.x -= nx * push; b.y -= ny * push;
+        }
+      }
+      const d = Math.sqrt(a.x * a.x + a.y * a.y);
+      if (d > maxR) { a.x *= maxR / d; a.y *= maxR / d; }
     }
   }
 
@@ -281,7 +288,7 @@ function buildEdges(nodes: GraphNode[], dims: string[]): Edge[] {
 // Gives a smooth Voronoi-like "emotion territory" background.
 
 const TERRAIN_PIXEL = 256;
-const TERRAIN_WORLD = 700;  // half-extent; poles sit at r≈310
+const TERRAIN_WORLD = 1100;  // half-extent; poles sit at r≈310; enlarged for 650+ nodes
 
 function buildTerrain(poles: Pole[]): HTMLCanvasElement {
   const offscreen = document.createElement('canvas');
@@ -484,13 +491,13 @@ export default function EmotionGraph() {
       const flt  = filterRef.current;
       const dims = dimsRef.current;
 
-      // Layer 3: Persistent similarity edges (skip for large graphs — too cluttered)
-      if (showEdgesRef.current && edges.length > 0 && nodes.length <= 250) {
+      // Layer 3: Persistent similarity edges — always visible
+      if (showEdgesRef.current && edges.length > 0) {
         ctx.setLineDash([]);
-        ctx.lineWidth = 0.8;
+        ctx.lineWidth = 0.7;
         for (const edge of edges) {
           const fade = Math.min(1, Math.max(0, (revealAge - 700) / 900));
-          ctx.strokeStyle = `rgba(148,163,184,${(edge.weight * 0.18 * fade).toFixed(3)})`;
+          ctx.strokeStyle = `rgba(148,163,184,${(edge.weight * 0.15 * fade).toFixed(3)})`;
           ctx.beginPath(); ctx.moveTo(edge.a.x, edge.a.y); ctx.lineTo(edge.b.x, edge.b.y); ctx.stroke();
         }
       }
