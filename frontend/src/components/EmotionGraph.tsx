@@ -139,6 +139,69 @@ function buildNodes(
   });
 }
 
+function resolveLayout(nodes: GraphNode[]): void {
+  const anchors = nodes.map(node => ({ x: node.x, y: node.y }));
+
+  // Seed each node on a small deterministic spiral around its anchor so dense
+  // clusters have room to separate before iterative relaxation.
+  nodes.forEach((node, index) => {
+    const seedRadius = 16 + (index % 9) * 4 + node.radius * 0.8;
+    node.x = anchors[index].x + Math.cos(node.floatPhase) * seedRadius;
+    node.y = anchors[index].y + Math.sin(node.floatPhase) * seedRadius;
+  });
+
+  const maxRadius = TERRAIN_WORLD * 0.78;
+  for (let iter = 0; iter < 140; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const anchor = anchors[i];
+
+      node.x += (anchor.x - node.x) * 0.09;
+      node.y += (anchor.y - node.y) * 0.09;
+
+      for (let j = i + 1; j < nodes.length; j++) {
+        const other = nodes[j];
+        const dx = node.x - other.x;
+        const dy = node.y - other.y;
+        const minD = node.radius + other.radius + 5;
+        const d2 = dx * dx + dy * dy;
+
+        if (d2 === 0) {
+          const nudge = 0.5;
+          node.x += nudge;
+          other.x -= nudge;
+          continue;
+        }
+
+        if (d2 < minD * minD) {
+          const d = Math.sqrt(d2);
+          const overlap = (minD - d) * 0.5;
+          const nx = dx / d;
+          const ny = dy / d;
+          node.x += nx * overlap;
+          node.y += ny * overlap;
+          other.x -= nx * overlap;
+          other.y -= ny * overlap;
+        }
+      }
+
+      const dist = Math.sqrt(node.x * node.x + node.y * node.y);
+      if (dist > maxRadius) {
+        const scale = maxRadius / dist;
+        node.x *= scale;
+        node.y *= scale;
+      }
+    }
+  }
+
+  nodes.forEach(node => {
+    node.rx = node.x;
+    node.ry = node.y;
+    node.vx = 0;
+    node.vy = 0;
+  });
+}
+
 // ─── Persistent similarity edges ──────────────────────────────────────────────
 
 const EDGE_TOP_K = 3;
@@ -262,7 +325,7 @@ export default function EmotionGraph() {
         dimsRef.current = keys;
         const poles = buildPoles(keys);
         const nodes = buildNodes(tracks, emotionsMap, poles);
-        nodes.forEach(n => { n.rx = n.x; n.ry = n.y; n.vx = 0; n.vy = 0; });
+        resolveLayout(nodes);
         polesRef.current   = poles;
         nodesRef.current   = nodes;
         edgesRef.current   = buildEdges(nodes, keys);
