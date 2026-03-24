@@ -261,10 +261,9 @@ export default function EmotionGraph() {
   const filterRef   = useRef<{ emotion: string | null; threshold: number }>({ emotion: null, threshold: 0.5 });
   const dimsRef     = useRef<string[]>([]);
   const showEdgesRef= useRef(true);
-  const simActive   = useRef(true);
+  const simActive   = useRef(false);
   const floatActive = useRef(false);
-  const simStartRef = useRef(0);
-  const easeStartRef = useRef(0);   // timestamp when ease-to-rest phase begins
+  const revealStartRef = useRef(0);
   const animRef     = useRef(0);
   const drag        = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
@@ -305,15 +304,15 @@ export default function EmotionGraph() {
         dimsRef.current = keys;
         const poles = buildPoles(keys);
         const nodes = buildNodes(tracks, emotionsMap, poles);
+        nodes.forEach(n => { n.rx = n.x; n.ry = n.y; n.vx = 0; n.vy = 0; });
         polesRef.current   = poles;
         nodesRef.current   = nodes;
         edgesRef.current   = buildEdges(nodes, keys);
         terrainRef.current = buildTerrain(poles);
         floatActive.current = false;
-        simActive.current  = true;
-        simStartRef.current = performance.now();
-        // Pre-run 25 steps to dissolve the initial pile-up before first render
-        for (let i = 0; i < 25; i++) stepSimulation(nodes, poles);
+        simActive.current  = false;
+        revealStartRef.current = performance.now();
+        setSettled(false);
         const cont = containerRef.current;
         if (cont) tf.current = { x: cont.clientWidth / 2, y: cont.clientHeight / 2, scale: 1 };
         setCount(nodes.length);
@@ -335,8 +334,8 @@ export default function EmotionGraph() {
 
     let lastRender = 0;
     const tick = (ts: number) => {
-      // Float mode at 30fps; sim and hover at full 60fps
-      const slowFrame = floatActive.current && !simActive.current && !hoveredRef.current;
+      // Float mode at 30fps; reveal and hover at full 60fps
+      const slowFrame = floatActive.current && !hoveredRef.current;
       if (slowFrame && ts - lastRender < 33) { animRef.current = requestAnimationFrame(tick); return; }
       lastRender = ts;
       const W = el.parentElement?.clientWidth  ?? 0;
@@ -356,33 +355,10 @@ export default function EmotionGraph() {
       }
       const t = tf.current;
 
-      if (simActive.current && nodes.length > 0) {
-        const age = ts - simStartRef.current;
-        const SIM_DUR = 10000;  // run physics up to 10s
-        const RAMP_START = 7000; // start softening damping at 7s
-
-        // Gradually increase damping in the last 3s so velocity dies smoothly
-        const rampT = age > RAMP_START ? Math.min(1, (age - RAMP_START) / (SIM_DUR - RAMP_START)) : 0;
-        const dampingNow = 0.94 + rampT * (0.998 - 0.94);
-        // Temporarily override the module constant for this step
-        (nodes as any)._dampingOverride = dampingNow;
-
-        const still = !stepSimulation(nodes, poles);
-        if (still || age > SIM_DUR) {
-          nodes.forEach(n => { n.rx = n.x; n.ry = n.y; n.vx = 0; n.vy = 0; });
-          simActive.current = false;
-          easeStartRef.current = ts;
-          setSettled(true);
-        }
-      }
-
-      // Ease-to-rest phase: nodes are already at rx/ry (physics placed them there),
-      // so we just need to wait 1s before starting float so there's no jump
-      const easeAge = floatActive.current ? Infinity : (easeStartRef.current > 0 ? ts - easeStartRef.current : -1);
-      if (!simActive.current && !floatActive.current && easeAge >= 0) {
-        if (easeAge > 1000) {
-          floatActive.current = true;
-        }
+      const revealAge = revealStartRef.current > 0 ? ts - revealStartRef.current : 0;
+      if (!floatActive.current && revealAge > 2400) {
+        floatActive.current = true;
+        setSettled(true);
       }
 
       // Float mode: each bubble gently drifts on its own Lissajous path
@@ -409,7 +385,12 @@ export default function EmotionGraph() {
 
       // Layer 1: KNN terrain
       const terrain = terrainRef.current;
-      if (terrain) ctx.drawImage(terrain, -TERRAIN_WORLD, -TERRAIN_WORLD, TERRAIN_WORLD*2, TERRAIN_WORLD*2);
+      if (terrain) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, revealAge / 900);
+        ctx.drawImage(terrain, -TERRAIN_WORLD, -TERRAIN_WORLD, TERRAIN_WORLD*2, TERRAIN_WORLD*2);
+        ctx.restore();
+      }
 
       // Layer 2: Nebula glows
       for (const p of poles) {
@@ -418,8 +399,11 @@ export default function EmotionGraph() {
         grd.addColorStop(0,    `rgba(${r},${g},${b},0.11)`);
         grd.addColorStop(0.45, `rgba(${r},${g},${b},0.04)`);
         grd.addColorStop(1,    `rgba(${r},${g},${b},0)`);
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, revealAge / 1100);
         ctx.fillStyle = grd;
         ctx.beginPath(); ctx.arc(p.x, p.y, NEBULA_R, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
       }
 
       const hov  = hoveredRef.current;
@@ -432,7 +416,8 @@ export default function EmotionGraph() {
         ctx.setLineDash([]);
         ctx.lineWidth = 0.8;
         for (const edge of edges) {
-          ctx.strokeStyle = `rgba(148,163,184,${(edge.weight * 0.18).toFixed(3)})`;
+          const fade = Math.min(1, Math.max(0, (revealAge - 700) / 900));
+          ctx.strokeStyle = `rgba(148,163,184,${(edge.weight * 0.18 * fade).toFixed(3)})`;
           ctx.beginPath(); ctx.moveTo(edge.a.x, edge.a.y); ctx.lineTo(edge.b.x, edge.b.y); ctx.stroke();
         }
       }
@@ -452,23 +437,28 @@ export default function EmotionGraph() {
       }
 
       // Layer 5: Song nodes — bubble style (halo + body + specular, no shadowBlur)
-      for (const node of nodes) {
+      for (let index = 0; index < nodes.length; index++) {
+        const node = nodes[index];
         const isHov  = node === hov;
         const isSel  = node === sel;
         const emVal  = flt.emotion ? (node.emotions[flt.emotion] ?? 0) : 1;
         const dimmed = flt.emotion !== null && emVal < flt.threshold;
         const [r, g, b] = node.colorRgb;
-        const radius = node.radius + (isHov || isSel ? 2 : 0);
+        const nodeDelay = Math.min(index * 2, 900);
+        const nodeT = Math.max(0, Math.min(1, (revealAge - nodeDelay) / 1400));
+        const eased = 1 - Math.pow(1 - nodeT, 3);
+        if (eased <= 0) continue;
+        const radius = (node.radius + (isHov || isSel ? 2 : 0)) * (0.35 + eased * 0.65);
 
         ctx.save();
 
         // Soft outer glow / halo
-        ctx.globalAlpha = dimmed ? 0.03 : (isHov ? 0.22 : 0.11);
+        ctx.globalAlpha = (dimmed ? 0.03 : (isHov ? 0.22 : 0.11)) * eased;
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.beginPath(); ctx.arc(node.x, node.y, radius * 2.8, 0, Math.PI*2); ctx.fill();
 
         // Main bubble body
-        ctx.globalAlpha = dimmed ? 0.07 : 0.86;
+        ctx.globalAlpha = (dimmed ? 0.07 : 0.86) * eased;
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.beginPath(); ctx.arc(node.x, node.y, radius, 0, Math.PI*2); ctx.fill();
 
@@ -487,7 +477,7 @@ export default function EmotionGraph() {
 
         // Specular glint (top-left highlight gives 3-D bubble feel)
         if (!dimmed) {
-          ctx.globalAlpha = 0.30;
+          ctx.globalAlpha = 0.30 * eased;
           ctx.fillStyle = '#ffffff';
           ctx.beginPath();
           ctx.arc(node.x - radius*0.28, node.y - radius*0.30, radius*0.40, 0, Math.PI*2);
@@ -594,14 +584,10 @@ export default function EmotionGraph() {
 
   const rerunSim = useCallback(() => {
     floatActive.current = false;
-    simActive.current = true;
-    simStartRef.current = performance.now();
-    easeStartRef.current = 0;
+    simActive.current = false;
+    revealStartRef.current = performance.now();
     setSettled(false);
-    nodesRef.current.forEach(n => {
-      n.vx = (Math.random() - 0.5) * 2;
-      n.vy = (Math.random() - 0.5) * 2;
-    });
+    nodesRef.current.forEach(n => { n.x = n.rx; n.y = n.ry; });
   }, []);
 
   const poles = polesRef.current;
@@ -670,7 +656,7 @@ export default function EmotionGraph() {
           </button>
           <button onClick={rerunSim}
             className="w-full text-left px-3 py-1.5 rounded text-xs text-slate-500 hover:text-white hover:bg-slate-800 transition">
-            ↺&nbsp; Re-run physics
+            ✦&nbsp; Replay reveal
           </button>
         </div>
         <div className="p-3 border-t border-slate-800">
@@ -697,7 +683,7 @@ export default function EmotionGraph() {
           onMouseUp={onMouseUp} onMouseLeave={onMouseLeave} />
         {!settled && nodeCount > 0 && (
           <div className="absolute top-3 right-4 bg-slate-900/70 text-slate-500 text-xs px-2 py-1 rounded-full backdrop-blur">
-            Settling…
+            Appearing…
           </div>
         )}
         <div className="absolute bottom-3 right-4 text-slate-700 text-xs pointer-events-none select-none">
