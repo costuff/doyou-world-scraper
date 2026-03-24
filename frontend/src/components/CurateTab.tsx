@@ -55,6 +55,18 @@ interface TaxonomyNode {
   children?: TaxonomyNode[];
 }
 
+function ensurePath(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+}
+
+function getPreferredPath(label: Partial<TrackLabel> | null | undefined): string[] {
+  if (!label) return [];
+  const user = ensurePath(label.label_path);
+  if (user.length > 0) return user;
+  return ensurePath(label.auto_label_path);
+}
+
 const ZONE_COLORS: Record<string, string> = {
   euphoria: '#fbbf24', power: '#f97316', aggression: '#dc2626',
   tension: '#ef4444', melancholy: '#6366f1', nostalgia: '#a78bfa',
@@ -119,14 +131,19 @@ export default function CurateTab() {
     // Check cache
     if (labels[track.id]) {
       const lbl = labels[track.id];
-      setPickedPath(lbl.label_path.length ? lbl.label_path : lbl.auto_label_path);
+      setPickedPath(getPreferredPath(lbl));
       return;
     }
 
     try {
       const { data } = await axios.get<TrackLabel>(`${ANALYTICS}/api/v1/tracks/${track.id}/label`);
-      setLabels(prev => ({ ...prev, [track.id]: data }));
-      setPickedPath(data.label_path.length ? data.label_path : data.auto_label_path);
+      const normalized: TrackLabel = {
+        ...data,
+        label_path: ensurePath(data.label_path),
+        auto_label_path: ensurePath(data.auto_label_path),
+      };
+      setLabels(prev => ({ ...prev, [track.id]: normalized }));
+      setPickedPath(getPreferredPath(normalized));
     } catch {
       // No label yet — show empty
       setPickedPath([]);
@@ -322,8 +339,8 @@ export default function CurateTab() {
           ) : tracks.map(track => {
             const lbl = labels[track.id];
             const isSaved = saved[track.id];
-            const autoZone = lbl?.auto_label_path?.[0];
-            const hasUserLabel = lbl && lbl.label_path.length > 0;
+            const autoZone = ensurePath(lbl?.auto_label_path)[0];
+            const hasUserLabel = ensurePath(lbl?.label_path).length > 0;
             return (
               <button key={track.id}
                 onClick={() => selectTrack(track)}

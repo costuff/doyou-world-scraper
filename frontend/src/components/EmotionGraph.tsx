@@ -490,7 +490,7 @@ export default function EmotionGraph() {
         const isHov  = node === hov;
         const isSel  = selIds.has(node.id);
         const emVal  = flt.emotion ? (node.emotions[flt.emotion] ?? 0) : 1;
-        const dimmed = flt.emotion !== null && emVal < flt.threshold;
+        const dimmed = flt.emotion !== null && emVal < flt.threshold && !isSel;
         const [r, g, b] = node.colorRgb;
         const nodeDelay = Math.min(index * 2, 900);
         const nodeT = Math.max(0, Math.min(1, (revealAge - nodeDelay) / 1400));
@@ -544,6 +544,29 @@ export default function EmotionGraph() {
         const bx = hov.x - bw/2, by = hov.y - hov.radius - bh - 8;
         ctx.fillStyle = 'rgba(8,14,26,0.9)'; drawRoundRect(ctx, bx, by, bw, bh, 5); ctx.fill();
         ctx.fillStyle = '#f1f5f9'; ctx.textAlign = 'center'; ctx.fillText(hov.shortName, hov.x, by + 15);
+      }
+
+      // Persistent labels for selected nodes (up to 18 to reduce clutter)
+      const selectedNodes = nodes.filter((n: GraphNode) => selIds.has(n.id)).slice(0, 18);
+      for (const node of selectedNodes) {
+        if (hov && hov.id === node.id) continue; // hover tooltip already shown
+        const label = node.shortName;
+        ctx.font = '11px system-ui,sans-serif';
+        const tw = ctx.measureText(label).width;
+        const pad = 6;
+        const bh = 18;
+        const bw = tw + pad * 2;
+        const by = node.y - node.radius - bh - 7;
+        const bx = node.x - bw / 2;
+        ctx.fillStyle = 'rgba(15,23,42,0.88)';
+        drawRoundRect(ctx, bx, by, bw, bh, 4);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, node.x, by + 12.5);
       }
 
       ctx.restore();
@@ -653,7 +676,7 @@ export default function EmotionGraph() {
           next.delete(node.id);
           // If we deselected the focused node, focus another selected one
           if (focusedRef.current?.id === node.id) {
-            const remaining = nodesRef.current.filter(n => next.has(n.id));
+            const remaining = nodesRef.current.filter((n: GraphNode) => next.has(n.id));
             const nxt = remaining[remaining.length - 1] ?? null;
             focusedRef.current = nxt;
             setFocused(nxt);
@@ -665,12 +688,6 @@ export default function EmotionGraph() {
         }
         selectedIdsRef.current = next;
         setSelectedIds(new Set(next));
-      } else {
-        // Click empty space — clear all selection
-        selectedIdsRef.current = new Set();
-        setSelectedIds(new Set());
-        focusedRef.current = null;
-        setFocused(null);
       }
     }
   }, [toWorld, hitTest]);

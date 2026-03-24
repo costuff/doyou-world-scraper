@@ -90,28 +90,15 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
   - See docs/ANALYTICS_INTEGRATION.md for setup
 - [ ] **Frontend Test Suite (PRIORITY 3)** - Install Vitest + React Testing Library + jsdom, add comprehensive tests for all components, hooks, and services (currently 0% coverage)
 - [ ] **Music exploration graph (PRIORITY 4)** - Energy vs Danceability scatter plot, BPM histogram, key/mode distribution, interactive filtering by audio features; data sourced from analytics API `/api/v1/tracks`
-  - Can start once analytics v0.6.0 is deployed and tracks are re-analyzed (mode + raw features available)
-  - `key` and `mode` fields now returned in `GET /api/v1/tracks` response
-- [ ] **Graph Explorer — Playlist Builder / Radio Show Mode (PRIORITY 5)** — In the EmotionGraph, after curating and ranking songs, allow the user to build an ordered playlist for a radio show
-  - Floating/slide-in "Playlist" side panel triggered from the graph toolbar
-  - Click any track node to add it to the active playlist
-  - Ordered track list: title + zone chip, drag-up/down arrows to reorder
-  - Remove tracks (× button), name the playlist (radio show title field)
-  - Multiple playlists: create new, switch between, delete
-  - Export: copy ordered list to clipboard or download as JSON / plain text
-  - Store playlists in `localStorage` first; later persist to analytics API via `POST /api/v1/playlists`
-  - Analytics API (future): `GET /api/v1/playlists`, `POST /api/v1/playlists`, `PUT /api/v1/playlists/:id`, `DELETE /api/v1/playlists/:id`
-- [ ] **Emotional graph explorer (PRIORITY 6)** — Force-directed graph (D3.js / react-force-graph) where each node = a song, edges = similarity score from analytics `track_similarity` table
-  - **Blocked on**: analytics emotion layer (migration 004 + `track_emotions` table) and similarity graph (migration 005 + `track_similarity` table)
-  - Start frontend scaffolding (install `react-force-graph`, stub component, mock data) while analytics endpoints are being built
-  - Node color = dominant emotion; node size = confidence; edge thickness = similarity score (threshold 0.7)
-  - Clicking a node plays the song in the existing audio player bar
-  - Dragging toward emotion "pole" anchor nodes filters/pulls visible songs
-  - The graph is infinite — you drift from emotion to emotion by following edges
-  - Emotion dimensions: `tension`, `melancholy`, `euphoria`, `aggression`, `serenity`, `nostalgia`, `sensuality`, `power`
-  - Sidebar on node select: track name, dominant emotion, feature breakdown, play button
-  - Requires analytics endpoints: `GET /api/v1/tracks/:id/similar` + `GET /api/v1/tracks/:id/emotions`
 - [ ] **UI overhaul** - Dark theme polish, animated chart transitions, improved visual hierarchy, better mobile layout
+- [ ] **Label intelligence pipeline (NEW)**
+  - [ ] Define canonical mapping from curated `label_path` → feature vectors (emotion targets, BPM range, energy/valence bands)
+  - [ ] Add backend materialization job to compute per-label aggregates from all curated tracks (centroids + variance)
+  - [ ] Add “similar to this label” scoring endpoint for unlabeled tracks (active-learning assist)
+  - [ ] Auto-suggest labels for remaining tracks using nearest curated label centroid; expose confidence + uncertainty
+  - [ ] Track drift: when new curated examples arrive, recalculate label profiles and version them
+  - [ ] Build sequence generator prototype: given label/mood path + constraints (length/BPM curve), return ordered track suggestions
+  - [ ] Add explainability UI: show why a track matched a label (top contributing features)
 
 ### Music Metadata & Analysis (Basic)
 - [x] **FIX AUDIO ANALYSIS JSON PARSING** - Fixed librosa warnings and Python path detection
@@ -389,10 +376,7 @@ doyou-world-scraper/
 - [x] Expose the web dashboard on a configurable port for remote access to the music library
 - [x] GitHub Actions CI/CD with Watchtower auto-deployment
 - [ ] Set up scheduled jobs for scraping and downloads
-- [ ] **Authentication (personal use → multi-user)**
-  - Short term: add basic auth or a simple token gate to the dashboard (currently open to anyone on the tunnel)
-  - Long term: proper user accounts so others can have their own library (scrape history, downloads, NAS folder per user)
-  - Candidate: Cloudflare Access (zero-config, sits in front of the tunnel) for the quick win, then migrate to in-app auth when multi-user is needed
+- [ ] Add authentication/user management for the dashboard
 
 ### Development Workflow & Testing
 - [x] **Document local development setup** - Guide for running without Docker for faster iteration (see DEVELOPMENT.md)
