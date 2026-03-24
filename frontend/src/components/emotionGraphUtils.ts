@@ -5,10 +5,10 @@
 
 export const POLE_ORBIT = 310;
 export const NEBULA_R   = 215;
-export const ATTRACT    = 0.009;
-export const REPEL      = 650;
-export const CENTER_PULL = 0.00018;
-export const DAMPING    = 0.96;   // high = very slow/smooth energy decay
+export const ATTRACT    = 0.007;
+export const REPEL      = 480;
+export const CENTER_PULL = 0.00015;
+export const DAMPING    = 0.94;
 export const NODE_MIN_R = 4;
 export const NODE_MAX_R = 14;
 

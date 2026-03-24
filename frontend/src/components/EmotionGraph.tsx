@@ -127,10 +127,9 @@ function buildNodes(
       shortName,
       features: f,
       emotions,
-      x:  ix + (Math.random() - 0.5) * 220,
-      y:  iy + (Math.random() - 0.5) * 220,
-      vx: (Math.random() - 0.5) * 1.2,
-      vy: (Math.random() - 0.5) * 1.2,
+      x:  ix + (Math.random() - 0.5) * 8,
+      y:  iy + (Math.random() - 0.5) * 8,
+      vx: 0, vy: 0,
       rx: 0, ry: 0,
       floatPhase: (t.id * 2.399) % (Math.PI * 2),  // golden-angle spread
       radius: NODE_MIN_R + energy * (NODE_MAX_R - NODE_MIN_R),
@@ -144,6 +143,7 @@ function buildNodes(
 
 function stepSimulation(nodes: GraphNode[], poles: Pole[]): boolean {
   let totalKE = 0;
+  const damp = (nodes as any)._dampingOverride ?? DAMPING;
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
     let fx = 0, fy = 0;
@@ -172,8 +172,8 @@ function stepSimulation(nodes: GraphNode[], poles: Pole[]): boolean {
     fx -= n.x * CENTER_PULL;
     fy -= n.y * CENTER_PULL;
 
-    n.vx = (n.vx + fx) * DAMPING;
-    n.vy = (n.vy + fy) * DAMPING;
+    n.vx = (n.vx + fx) * damp;
+    n.vy = (n.vy + fy) * damp;
     n.x += n.vx;
     n.y += n.vy;
     totalKE += Math.abs(n.vx) + Math.abs(n.vy);
@@ -264,6 +264,7 @@ export default function EmotionGraph() {
   const simActive   = useRef(true);
   const floatActive = useRef(false);
   const simStartRef = useRef(0);
+  const easeStartRef = useRef(0);   // timestamp when ease-to-rest phase begins
   const animRef     = useRef(0);
   const drag        = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
@@ -311,6 +312,8 @@ export default function EmotionGraph() {
         floatActive.current = false;
         simActive.current  = true;
         simStartRef.current = performance.now();
+        // Pre-run 25 steps to dissolve the initial pile-up before first render
+        for (let i = 0; i < 25; i++) stepSimulation(nodes, poles);
         const cont = containerRef.current;
         if (cont) tf.current = { x: cont.clientWidth / 2, y: cont.clientHeight / 2, scale: 1 };
         setCount(nodes.length);
@@ -355,23 +358,39 @@ export default function EmotionGraph() {
 
       if (simActive.current && nodes.length > 0) {
         const age = ts - simStartRef.current;
-        // One physics step per frame — gentle, smooth
+        const SIM_DUR = 10000;  // run physics up to 10s
+        const RAMP_START = 7000; // start softening damping at 7s
+
+        // Gradually increase damping in the last 3s so velocity dies smoothly
+        const rampT = age > RAMP_START ? Math.min(1, (age - RAMP_START) / (SIM_DUR - RAMP_START)) : 0;
+        const dampingNow = 0.94 + rampT * (0.998 - 0.94);
+        // Temporarily override the module constant for this step
+        (nodes as any)._dampingOverride = dampingNow;
+
         const still = !stepSimulation(nodes, poles);
-        // After 3.5s or natural KE decay: record rest positions and start float
-        if (still || age > 3500) {
-          nodes.forEach(n => { n.rx = n.x; n.ry = n.y; });
+        if (still || age > SIM_DUR) {
+          nodes.forEach(n => { n.rx = n.x; n.ry = n.y; n.vx = 0; n.vy = 0; });
           simActive.current = false;
-          floatActive.current = true;
+          easeStartRef.current = ts;
           setSettled(true);
+        }
+      }
+
+      // Ease-to-rest phase: nodes are already at rx/ry (physics placed them there),
+      // so we just need to wait 1s before starting float so there's no jump
+      const easeAge = floatActive.current ? Infinity : (easeStartRef.current > 0 ? ts - easeStartRef.current : -1);
+      if (!simActive.current && !floatActive.current && easeAge >= 0) {
+        if (easeAge > 1000) {
+          floatActive.current = true;
         }
       }
 
       // Float mode: each bubble gently drifts on its own Lissajous path
       if (floatActive.current) {
-        const ft = ts * 0.00042;
+        const ft = ts * 0.00025;
         for (const node of nodes) {
-          node.x = node.rx + Math.sin(ft       + node.floatPhase) * 1.6;
-          node.y = node.ry + Math.cos(ft * 0.7 + node.floatPhase * 1.3) * 1.6;
+          node.x = node.rx + Math.sin(ft       + node.floatPhase) * 5;
+          node.y = node.ry + Math.cos(ft * 0.73 + node.floatPhase * 1.3) * 5;
         }
       }
 
@@ -577,6 +596,7 @@ export default function EmotionGraph() {
     floatActive.current = false;
     simActive.current = true;
     simStartRef.current = performance.now();
+    easeStartRef.current = 0;
     setSettled(false);
     nodesRef.current.forEach(n => {
       n.vx = (Math.random() - 0.5) * 2;
