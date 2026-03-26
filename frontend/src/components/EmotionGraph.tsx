@@ -340,7 +340,8 @@ export default function EmotionGraph() {
   const floatActive    = useRef(false);
   const revealStartRef = useRef(0);
   const animRef        = useRef(0);
-  const drag           = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });;
+  const drag           = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });
+  const cursorWorldRef = useRef<{ x: number; y: number } | null>(null); // live world-space cursor for in-loop physics
 
   useEffect(() => { filterRef.current    = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
   useEffect(() => { focusedRef.current   = focused; }, [focused]);
@@ -441,6 +442,20 @@ export default function EmotionGraph() {
         for (const node of nodes) {
           node.x = node.rx + Math.sin(ft       + node.floatPhase) * 5;
           node.y = node.ry + Math.cos(ft * 0.73 + node.floatPhase * 1.3) * 5;
+        }
+      }
+
+      // ── Drag physics — runs in-loop so it takes effect AFTER float overwrites ──
+      // This is the only place that moves nodes during a drag; the event handler
+      // just updates cursorWorldRef and nothing else.
+      if (drag.current.nodeOn && drag.current.nodeIdx >= 0 && cursorWorldRef.current) {
+        const dragIdx = drag.current.nodeIdx;
+        const dragged = nodes[dragIdx];
+        if (dragged) {
+          const cur = cursorWorldRef.current;
+          dragged.x  = cur.x; dragged.y  = cur.y;
+          dragged.rx = cur.x; dragged.ry = cur.y;
+          relaxLayoutAround(nodes, dragIdx, 4, t.scale); // 4 iters per frame ≈ smooth 60fps wave
         }
       }
 
@@ -620,6 +635,7 @@ export default function EmotionGraph() {
   // ── Interaction ────────────────────────────────────────────────────────────
   const toWorld = useCallback((cx: number, cy: number) => {
     const r = canvasRef.current!.getBoundingClientRect(), t = tf.current;
+
     return { x: (cx - r.left - t.x) / t.scale, y: (cy - r.top - t.y) / t.scale };
   }, []);
 
@@ -634,30 +650,19 @@ export default function EmotionGraph() {
   const onMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const d = drag.current;
     const w = toWorld(e.clientX, e.clientY);
-    
+
     if (d.on && d.nodeOn) {
-      // Dragging a node: move it and relax nearby nodes
-      const node = nodesRef.current[d.nodeIdx];
-      if (node) {
-        // rx/ry = drag position so the float loop (node.x = rx + sin) follows the cursor
-        node.x = w.x;
-        node.y = w.y;
-        node.rx = w.x;
-        node.ry = w.y;
-        // Push nearby nodes out of the way — zoom-aware bow-wave so always visible on screen
-        relaxLayoutAround(nodesRef.current, d.nodeIdx, 20, tf.current.scale);
-      }
+      cursorWorldRef.current = w;
       return;
     }
-    
+
     if (d.on) {
-      // Panning the view
       tf.current = { ...tf.current, x: d.ox + e.clientX - d.sx, y: d.oy + e.clientY - d.sy };
       return;
     }
-    
+
     hoveredRef.current = hitTest(w.x, w.y);
-    canvasRef.current!.style.cursor = hoveredRef.current ? 'grab' : 'grab';
+    canvasRef.current!.style.cursor = 'grab';
   }, [toWorld, hitTest]);
 
   const onMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -666,6 +671,7 @@ export default function EmotionGraph() {
     
     if (e.button === 0 && node) {
       // Left-click on node: drag the node itself
+      cursorWorldRef.current = w;
       drag.current = { 
         on: true, sx: e.clientX, sy: e.clientY, ox: 0, oy: 0,
         nodeOn: true, nodeIdx: nodesRef.current.indexOf(node), lastX: w.x, lastY: w.y 
@@ -687,6 +693,7 @@ export default function EmotionGraph() {
     const wasNodeDrag = d.nodeOn;
     const nodeIdx = d.nodeIdx;
 
+    cursorWorldRef.current = null;
     drag.current.on = false;
     drag.current.nodeOn = false;
     canvasRef.current!.style.cursor = 'grab';
