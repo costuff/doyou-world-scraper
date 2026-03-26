@@ -323,6 +323,7 @@ export default function EmotionGraph() {
   const revealStartRef = useRef(0);
   const animRef        = useRef(0);
   const drag           = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });
+  const dragTrail      = useRef<Array<{ x: number; y: number; life: number }>>([]);
 
   useEffect(() => { filterRef.current    = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
   useEffect(() => { focusedRef.current   = focused; }, [focused]);
@@ -465,7 +466,16 @@ export default function EmotionGraph() {
         ctx.lineWidth = 0.7;
         for (const edge of edges) {
           const fade = Math.min(1, Math.max(0, (revealAge - 700) / 900));
-          ctx.strokeStyle = `rgba(148,163,184,${(edge.weight * 0.15 * fade).toFixed(3)})`;
+          // Check if both nodes are selected
+          const bothSelected = selIds.has(edge.a.id) && selIds.has(edge.b.id);
+          if (bothSelected) {
+            // Highlight selected-to-selected edges: bright & thick
+            ctx.lineWidth = 2.2;
+            ctx.strokeStyle = `rgba(168,85,247,${(0.7 * fade).toFixed(3)})`;
+          } else {
+            ctx.lineWidth = 0.7;
+            ctx.strokeStyle = `rgba(148,163,184,${(edge.weight * 0.15 * fade).toFixed(3)})`;
+          }
           ctx.beginPath(); ctx.moveTo(edge.a.x, edge.a.y); ctx.lineTo(edge.b.x, edge.b.y); ctx.stroke();
         }
       }
@@ -473,15 +483,36 @@ export default function EmotionGraph() {
       // Layer 4: Hover similarity threads (bright dashed, top-6)
       if (hov && nodes.length > 1) {
         const sims = nodes
-          .filter(n => n !== hov)
-          .map(n => ({ n, s: cosineSim(hov.emotions, n.emotions, dims) }))
-          .sort((a, b) => b.s - a.s).slice(0, 6);
+          .filter((n: GraphNode) => n !== hov)
+          .map((n: GraphNode) => ({ n, s: cosineSim(hov.emotions, n.emotions, dims) }))
+          .sort((a: any, b: any) => b.s - a.s).slice(0, 6);
         ctx.setLineDash([4, 6]); ctx.lineWidth = 1.2;
         for (const { n, s } of sims) {
           ctx.strokeStyle = `rgba(148,163,184,${(s * 0.8).toFixed(2)})`;
           ctx.beginPath(); ctx.moveTo(hov.x, hov.y); ctx.lineTo(n.x, n.y); ctx.stroke();
         }
         ctx.setLineDash([]);
+      }
+
+      // Layer 4.5: Drag trail effect (water resistance particles)
+      const trail = dragTrail.current;
+      if (trail.length > 0) {
+        for (let i = 0; i < trail.length; i++) {
+          const particle = trail[i];
+          particle.life -= 0.06; // fade out
+          const alpha = Math.max(0, particle.life);
+          ctx.globalAlpha = alpha * 0.4;
+          ctx.fillStyle = '#7c3aed'; // violet
+          ctx.beginPath();
+          const size = 2.5 * alpha;
+          ctx.arc(particle.x, particle.y, size, 0, Math.PI * 2);
+          ctx.fill();
+          if (particle.life <= 0) {
+            trail.splice(i, 1);
+            i--;
+          }
+        }
+        ctx.globalAlpha = 1;
       }
 
       // Layer 5: Song nodes — bubble style (halo + body + specular, no shadowBlur)
@@ -612,6 +643,19 @@ export default function EmotionGraph() {
       // Dragging a node: move it and relax nearby nodes
       const node = nodesRef.current[d.nodeIdx];
       if (node) {
+        // Add trail particles for water resistance effect
+        if (Math.random() > 0.5) {
+          dragTrail.current.push({
+            x: node.x,
+            y: node.y,
+            life: 1.0,
+          });
+          // Keep trail length reasonable
+          if (dragTrail.current.length > 40) {
+            dragTrail.current.shift();
+          }
+        }
+        
         // rx/ry = drag position so the float loop (node.x = rx + sin) follows the cursor
         node.x = w.x;
         node.y = w.y;
@@ -663,6 +707,20 @@ export default function EmotionGraph() {
     drag.current.on = false;
     drag.current.nodeOn = false;
     canvasRef.current!.style.cursor = 'grab';
+
+    // If we were dragging a node, trigger extended relaxation on release for smooth settling
+    if (wasNodeDrag && moved && nodeIdx >= 0) {
+      const draggedNode = nodesRef.current[nodeIdx];
+      if (draggedNode) {
+        // Update the rest position and trigger extended physics relaxation
+        draggedNode.rx = draggedNode.x;
+        draggedNode.ry = draggedNode.y;
+        // Run more intensive relaxation iterations to let graph settle naturally
+        relaxLayoutAround(nodesRef.current, nodeIdx, 40);
+      }
+      dragTrail.current = []; // clear trail
+      return;
+    }
 
     if (!moved) {
       // Click (no movement) — handle selection
