@@ -99,13 +99,6 @@ function drawRoundRect(
   ctx.closePath();
 }
 
-function clampToWorld(x: number, y: number) {
-  return {
-    x: Math.max(-WORLD_HALF_W, Math.min(WORLD_HALF_W, x)),
-    y: Math.max(-WORLD_HALF_H, Math.min(WORLD_HALF_H, y)),
-  };
-}
-
 // ─── Build graph nodes ────────────────────────────────────────────────────────
 
 function buildNodes(
@@ -125,15 +118,17 @@ function buildNodes(
     const instrumental = f.instrumentalness ?? 0.5;
     const speech = f.speechiness ?? 0.5;
 
-    // ── Seed: freeform rectangle with a light feature bias.
-    // This removes the hard circle and starts to create meaningful regions:
-    // dance/energy tends rightward, acoustic/instrumental tends leftward,
-    // happier/brighter tends upward.
-    const featureX = clamp01((dance * 0.65 + energy * 0.35) - (acoustic * 0.55 + instrumental * 0.45));
-    const featureY = clamp01((valence * 0.7 + energy * 0.3) - (speech * 0.25 + acoustic * 0.2));
-    const ix = (Math.random() - 0.5) * WORLD_HALF_W * 1.55 + (featureX - 0.5) * WORLD_HALF_W * 0.9;
-    const iy = (Math.random() - 0.5) * WORLD_HALF_H * 1.55 - (featureY - 0.5) * WORLD_HALF_H * 0.9;
-    const initial = clampToWorld(ix, iy);
+    // ── Seed: open world, no boundary. Feature bias pulls nodes toward their
+    // natural region while a large random jitter keeps it chaotic, not grid-like.
+    // No clamping — collision relaxation will spread them naturally.
+    //   X axis: danceable/energetic → right   ↔   acoustic/instrumental → left
+    //   Y axis: happy/bright → up             ↔   speech-heavy/dark → down
+    const featureX = (dance * 0.6 + energy * 0.4) - (acoustic * 0.5 + instrumental * 0.5);
+    const featureY = (valence * 0.65 + energy * 0.35) - (speech * 0.3 + acoustic * 0.2);
+    const spread = TERRAIN_WORLD * 1.4;
+    const jitter = TERRAIN_WORLD * 1.1;
+    const ix = featureX * spread + (Math.random() - 0.5) * jitter;
+    const iy = -featureY * spread + (Math.random() - 0.5) * jitter;
 
     const raw = t.file_name;
     const clean = raw.replace(/\s*\[[\w-]+\](\.\w+)?$/, '').replace(/\.\w+$/, '').trim() || raw;
@@ -145,8 +140,8 @@ function buildNodes(
       shortName,
       features: f,
       emotions,
-      x:  initial.x + (Math.random() - 0.5) * 16,
-      y:  initial.y + (Math.random() - 0.5) * 16,
+      x:  ix,
+      y:  iy,
       vx: 0, vy: 0,
       rx: 0, ry: 0,
       floatPhase: (t.id * 2.399) % (Math.PI * 2),
@@ -187,9 +182,6 @@ function resolveLayout(nodes: GraphNode[]): void {
           b.x -= nx * push; b.y -= ny * push;
         }
       }
-      const clamped = clampToWorld(a.x, a.y);
-      a.x = clamped.x;
-      a.y = clamped.y;
     }
   }
 
@@ -215,9 +207,6 @@ function resolveLayout(nodes: GraphNode[]): void {
           b.x -= nx * push; b.y -= ny * push;
         }
       }
-      const clamped = clampToWorld(a.x, a.y);
-      a.x = clamped.x;
-      a.y = clamped.y;
     }
   }
 
@@ -284,13 +273,6 @@ function relaxLayoutAround(
 
       node.x += fx;
       node.y += fy;
-      // Keep rest position in sync so float mode doesn't snap back
-      node.rx = node.x;
-      node.ry = node.y;
-
-      const clamped = clampToWorld(node.x, node.y);
-      node.x = clamped.x;
-      node.y = clamped.y;
       node.rx = node.x;
       node.ry = node.y;
     }
@@ -324,8 +306,6 @@ function buildEdges(nodes: GraphNode[], dims: string[]): Edge[] {
 // Gives a smooth Voronoi-like "emotion territory" background.
 
 const TERRAIN_WORLD = 1100;  // half-extent; poles sit at r≈310; enlarged for 650+ nodes
-const WORLD_HALF_W = TERRAIN_WORLD * 1.12;
-const WORLD_HALF_H = TERRAIN_WORLD * 0.74;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -480,9 +460,9 @@ export default function EmotionGraph() {
         }
       } else if (releaseFlowRef.current.active && releaseFlowRef.current.nodeIdx >= 0) {
         const flow = releaseFlowRef.current;
-        relaxLayoutAround(nodes, flow.nodeIdx, 2, t.scale, flow.strength);
-        flow.strength *= 0.92;
-        if (flow.strength < 0.08) {
+        relaxLayoutAround(nodes, flow.nodeIdx, 3, t.scale, flow.strength);
+        flow.strength *= 0.975; // slow decay: ~3s at 60fps before dying out
+        if (flow.strength < 0.04) {
           releaseFlowRef.current = { active: false, nodeIdx: -1, strength: 0 };
         }
       }
@@ -736,7 +716,7 @@ export default function EmotionGraph() {
         draggedNode.ry = draggedNode.y;
         // Small immediate settle, then continue flowing in the render loop.
         relaxLayoutAround(nodesRef.current, nodeIdx, 6, tf.current.scale, 0.75);
-        releaseFlowRef.current = { active: true, nodeIdx, strength: 0.9 };
+        releaseFlowRef.current = { active: true, nodeIdx, strength: 1.4 };
       }
       return;
     }
@@ -771,7 +751,7 @@ export default function EmotionGraph() {
 
   const onMouseLeave = useCallback(() => {
     if (drag.current.nodeOn && drag.current.nodeIdx >= 0) {
-      releaseFlowRef.current = { active: true, nodeIdx: drag.current.nodeIdx, strength: 0.6 };
+      releaseFlowRef.current = { active: true, nodeIdx: drag.current.nodeIdx, strength: 1.2 };
     }
     cursorWorldRef.current = null;
     drag.current.on = false;
