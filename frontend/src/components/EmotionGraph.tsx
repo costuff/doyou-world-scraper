@@ -113,22 +113,16 @@ function buildNodes(
     const energy  = f.energy  ?? 0.5;
     const valence = f.valence ?? 0.5;
     const bpmNorm = f.bpm != null ? clamp01(f.bpm / 200) : 0.5;
-    const dance   = f.danceability ?? 0.5;
-    const acoustic = f.acousticness ?? 0.5;
-    const instrumental = f.instrumentalness ?? 0.5;
-    const speech = f.speechiness ?? 0.5;
 
-    // ── Seed: open world, no boundary. Feature bias pulls nodes toward their
-    // natural region while a large random jitter keeps it chaotic, not grid-like.
-    // No clamping — collision relaxation will spread them naturally.
-    //   X axis: danceable/energetic → right   ↔   acoustic/instrumental → left
-    //   Y axis: happy/bright → up             ↔   speech-heavy/dark → down
-    const featureX = (dance * 0.6 + energy * 0.4) - (acoustic * 0.5 + instrumental * 0.5);
-    const featureY = (valence * 0.65 + energy * 0.35) - (speech * 0.3 + acoustic * 0.2);
-    const spread = TERRAIN_WORLD * 1.4;
-    const jitter = TERRAIN_WORLD * 1.1;
-    const ix = featureX * spread + (Math.random() - 0.5) * jitter;
-    const iy = -featureY * spread + (Math.random() - 0.5) * jitter;
+    // Fully random seed — no feature bias. Position carries no meaning at this stage.
+    // TODO: add "Group by label" button that re-seeds by label clusters on demand.
+    // Use golden-angle spiral to guarantee even coverage with no centre clumping.
+    const i = tracks.indexOf(t);
+    const goldenAngle = 2.399963; // radians
+    const r = Math.sqrt(i + 1) * 38 + (Math.random() - 0.5) * 80;
+    const theta = i * goldenAngle + Math.random() * 0.9;
+    const ix = Math.cos(theta) * r;
+    const iy = Math.sin(theta) * r;
 
     const raw = t.file_name;
     const clean = raw.replace(/\s*\[[\w-]+\](\.\w+)?$/, '').replace(/\.\w+$/, '').trim() || raw;
@@ -305,7 +299,9 @@ function buildEdges(nodes: GraphNode[], dims: string[]): Edge[] {
 // Each pixel = weighted mean of pole colours, weight = 1 / d^2.2
 // Gives a smooth Voronoi-like "emotion territory" background.
 
-const TERRAIN_WORLD = 1100;  // half-extent; poles sit at r≈310; enlarged for 650+ nodes
+// TODO: "Group by label" button — when clicked, re-seed node positions by their
+// curated label clusters (similar labels → same region) so the graph becomes a
+// spatial label map. Re-run collision relaxation after repositioning.
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
