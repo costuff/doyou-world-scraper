@@ -221,12 +221,10 @@ function relaxLayoutAround(
   iterations: number = 20,
   viewScale: number = 1,
   bowStrength: number = 1,
+  updateRestPos: boolean = false, // only true on release, NOT during live drag
 ): void {
   const dragged = nodes[draggedIndex];
-
-  // Localized zoom-aware bow-wave: still visible when zoomed out, but no longer
-  // throws far-away nodes across the graph.
-  const bowRadius = Math.max(dragged.radius * 4.2, 95 / Math.max(viewScale, 0.08));
+  const bowRadius = Math.max(dragged.radius * 3.5, 70 / Math.max(viewScale, 0.08));
 
   for (let iter = 0; iter < iterations; iter++) {
     for (let i = 0; i < nodes.length; i++) {
@@ -245,30 +243,35 @@ function relaxLayoutAround(
         const d = Math.sqrt(d2);
 
         if (j === draggedIndex) {
-          // Local bow-wave: nearby nodes flow aside while distant ones stay mostly still.
           if (d < bowRadius) {
             const t = 1 - d / bowRadius;
             const smooth = t * t * (3 - 2 * t);
-            const strength = smooth * bowRadius * 0.026 * bowStrength;
+            const strength = smooth * bowRadius * 0.018 * bowStrength;
             fx += (dx / d) * strength;
             fy += (dy / d) * strength;
           }
         } else {
-          // Standard overlap repulsion between non-dragged nodes
           const minD = node.radius + other.radius + 22;
           if (d < minD) {
             const overlap = minD - d;
-            const repulsion = overlap * 0.55;
-            fx += (dx / d) * repulsion;
-            fy += (dy / d) * repulsion;
+            fx += (dx / d) * overlap * 0.45;
+            fy += (dy / d) * overlap * 0.45;
           }
         }
       }
 
+      // Spring back toward rest position — prevents cumulative drift while dragging
+      if (!updateRestPos) {
+        fx += (node.rx - node.x) * 0.08;
+        fy += (node.ry - node.y) * 0.08;
+      }
+
       node.x += fx;
       node.y += fy;
-      node.rx = node.x;
-      node.ry = node.y;
+      if (updateRestPos) {
+        node.rx = node.x;
+        node.ry = node.y;
+      }
     }
   }
 }
@@ -452,11 +455,11 @@ export default function EmotionGraph() {
           const cur = cursorWorldRef.current;
           dragged.x  = cur.x; dragged.y  = cur.y;
           dragged.rx = cur.x; dragged.ry = cur.y;
-          relaxLayoutAround(nodes, dragIdx, 2, t.scale, 1); // local, continuous restructuring while dragging
+          relaxLayoutAround(nodes, dragIdx, 2, t.scale, 1, false); // spring back, no rest-pos update
         }
       } else if (releaseFlowRef.current.active && releaseFlowRef.current.nodeIdx >= 0) {
         const flow = releaseFlowRef.current;
-        relaxLayoutAround(nodes, flow.nodeIdx, 3, t.scale, flow.strength);
+        relaxLayoutAround(nodes, flow.nodeIdx, 3, t.scale, flow.strength, true); // update rest pos during settle
         flow.strength *= 0.975; // slow decay: ~3s at 60fps before dying out
         if (flow.strength < 0.04) {
           releaseFlowRef.current = { active: false, nodeIdx: -1, strength: 0 };
@@ -499,21 +502,35 @@ export default function EmotionGraph() {
       // Layer 3: Persistent similarity edges — always visible
       if (showEdgesRef.current && edges.length > 0) {
         ctx.setLineDash([]);
-        ctx.lineWidth = 0.7;
         for (const edge of edges) {
           const fade = Math.min(1, Math.max(0, (revealAge - 700) / 900));
-          // Check if both nodes are selected
           const bothSelected = selIds.has(edge.a.id) && selIds.has(edge.b.id);
           if (bothSelected) {
-            // Highlight selected-to-selected edges: bright & thick
-            ctx.lineWidth = 2.2;
-            ctx.strokeStyle = `rgba(168,85,247,${(0.7 * fade).toFixed(3)})`;
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = `rgba(168,85,247,${(0.75 * fade).toFixed(3)})`;
           } else {
             ctx.lineWidth = 0.7;
             ctx.strokeStyle = `rgba(148,163,184,${(edge.weight * 0.15 * fade).toFixed(3)})`;
           }
           ctx.beginPath(); ctx.moveTo(edge.a.x, edge.a.y); ctx.lineTo(edge.b.x, edge.b.y); ctx.stroke();
         }
+      }
+
+      // Layer 3.5: Direct connection lines between ALL selected nodes (not just KNN neighbours)
+      if (selIds.size >= 2) {
+        const selNodes = nodes.filter((n: GraphNode) => selIds.has(n.id));
+        ctx.setLineDash([3, 5]);
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = 'rgba(168,85,247,0.35)';
+        for (let i = 0; i < selNodes.length; i++) {
+          for (let j = i + 1; j < selNodes.length; j++) {
+            ctx.beginPath();
+            ctx.moveTo(selNodes[i].x, selNodes[i].y);
+            ctx.lineTo(selNodes[j].x, selNodes[j].y);
+            ctx.stroke();
+          }
+        }
+        ctx.setLineDash([]);
       }
 
       // Layer 4: Hover similarity threads (bright dashed, top-6)
@@ -711,7 +728,7 @@ export default function EmotionGraph() {
         draggedNode.rx = draggedNode.x;
         draggedNode.ry = draggedNode.y;
         // Small immediate settle, then continue flowing in the render loop.
-        relaxLayoutAround(nodesRef.current, nodeIdx, 6, tf.current.scale, 0.75);
+        relaxLayoutAround(nodesRef.current, nodeIdx, 6, tf.current.scale, 0.75, true);
         releaseFlowRef.current = { active: true, nodeIdx, strength: 1.4 };
       }
       return;
