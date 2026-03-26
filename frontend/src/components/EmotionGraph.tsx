@@ -494,17 +494,29 @@ export default function EmotionGraph() {
         ctx.setLineDash([]);
       }
 
-      // Layer 4.5: Drag trail effect (water resistance particles)
+      // Layer 4.5: Drag trail effect (water resistance particles) + dragged node glow
       const trail = dragTrail.current;
+      const draggedNode = drag.current.nodeOn && drag.current.nodeIdx >= 0 ? nodesRef.current[drag.current.nodeIdx] : null;
+      
+      // Glow around dragged node
+      if (draggedNode) {
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = '#7c3aed';
+        ctx.beginPath();
+        ctx.arc(draggedNode.x, draggedNode.y, draggedNode.radius * 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      
       if (trail.length > 0) {
         for (let i = 0; i < trail.length; i++) {
           const particle = trail[i];
-          particle.life -= 0.06; // fade out
+          particle.life -= 0.05; // slower fade for longer trails
           const alpha = Math.max(0, particle.life);
-          ctx.globalAlpha = alpha * 0.4;
+          ctx.globalAlpha = alpha * 0.65; // more opaque
           ctx.fillStyle = '#7c3aed'; // violet
           ctx.beginPath();
-          const size = 2.5 * alpha;
+          const size = 4.5 * alpha; // bigger particles
           ctx.arc(particle.x, particle.y, size, 0, Math.PI * 2);
           ctx.fill();
           if (particle.life <= 0) {
@@ -643,15 +655,15 @@ export default function EmotionGraph() {
       // Dragging a node: move it and relax nearby nodes
       const node = nodesRef.current[d.nodeIdx];
       if (node) {
-        // Add trail particles for water resistance effect
-        if (Math.random() > 0.5) {
+        // Add trail particles for water resistance effect — spawn more frequently
+        if (Math.random() > 0.3) { // increased spawn rate
           dragTrail.current.push({
             x: node.x,
             y: node.y,
             life: 1.0,
           });
           // Keep trail length reasonable
-          if (dragTrail.current.length > 40) {
+          if (dragTrail.current.length > 60) { // longer trails
             dragTrail.current.shift();
           }
         }
@@ -661,8 +673,8 @@ export default function EmotionGraph() {
         node.y = w.y;
         node.rx = w.x;
         node.ry = w.y;
-        // Push nearby nodes out of the way
-        relaxLayoutAround(nodesRef.current, d.nodeIdx, 8);
+        // Push nearby nodes out of the way — more aggressive relaxation
+        relaxLayoutAround(nodesRef.current, d.nodeIdx, 20); // increased from 8
       }
       return;
     }
@@ -715,8 +727,8 @@ export default function EmotionGraph() {
         // Update the rest position and trigger extended physics relaxation
         draggedNode.rx = draggedNode.x;
         draggedNode.ry = draggedNode.y;
-        // Run more intensive relaxation iterations to let graph settle naturally
-        relaxLayoutAround(nodesRef.current, nodeIdx, 40);
+        // Run intensive relaxation iterations (100) to ensure no overlaps and smooth settling
+        relaxLayoutAround(nodesRef.current, nodeIdx, 100);
       }
       dragTrail.current = []; // clear trail
       return;
