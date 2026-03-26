@@ -99,6 +99,13 @@ function drawRoundRect(
   ctx.closePath();
 }
 
+function clampToWorld(x: number, y: number) {
+  return {
+    x: Math.max(-WORLD_HALF_W, Math.min(WORLD_HALF_W, x)),
+    y: Math.max(-WORLD_HALF_H, Math.min(WORLD_HALF_H, y)),
+  };
+}
+
 // ─── Build graph nodes ────────────────────────────────────────────────────────
 
 function buildNodes(
@@ -110,21 +117,27 @@ function buildNodes(
     const emotions = emotionsMap.get(t.id)!;
     const f = t.features;
 
-    // ── Seed: completely random positions across world space (no poles)
-    // Chaotic spread gives natural variety from the start
-    const maxR = TERRAIN_WORLD * 0.85;
-    const angle = Math.random() * Math.PI * 2;
-    const dist = Math.random() * maxR;
-    const ix = Math.cos(angle) * dist;
-    const iy = Math.sin(angle) * dist;
+    const energy  = f.energy  ?? 0.5;
+    const valence = f.valence ?? 0.5;
+    const bpmNorm = f.bpm != null ? clamp01(f.bpm / 200) : 0.5;
+    const dance   = f.danceability ?? 0.5;
+    const acoustic = f.acousticness ?? 0.5;
+    const instrumental = f.instrumentalness ?? 0.5;
+    const speech = f.speechiness ?? 0.5;
+
+    // ── Seed: freeform rectangle with a light feature bias.
+    // This removes the hard circle and starts to create meaningful regions:
+    // dance/energy tends rightward, acoustic/instrumental tends leftward,
+    // happier/brighter tends upward.
+    const featureX = clamp01((dance * 0.65 + energy * 0.35) - (acoustic * 0.55 + instrumental * 0.45));
+    const featureY = clamp01((valence * 0.7 + energy * 0.3) - (speech * 0.25 + acoustic * 0.2));
+    const ix = (Math.random() - 0.5) * WORLD_HALF_W * 1.55 + (featureX - 0.5) * WORLD_HALF_W * 0.9;
+    const iy = (Math.random() - 0.5) * WORLD_HALF_H * 1.55 - (featureY - 0.5) * WORLD_HALF_H * 0.9;
+    const initial = clampToWorld(ix, iy);
 
     const raw = t.file_name;
     const clean = raw.replace(/\s*\[[\w-]+\](\.\w+)?$/, '').replace(/\.\w+$/, '').trim() || raw;
     const shortName = clean.length > 36 ? clean.slice(0, 35) + '\u2026' : clean;
-
-    const energy  = f.energy  ?? 0.5;
-    const valence = f.valence ?? 0.5;
-    const bpmNorm = f.bpm != null ? clamp01(f.bpm / 200) : 0.5;
 
     return {
       id: t.id,
@@ -132,8 +145,8 @@ function buildNodes(
       shortName,
       features: f,
       emotions,
-      x:  ix + (Math.random() - 0.5) * 16,
-      y:  iy + (Math.random() - 0.5) * 16,
+      x:  initial.x + (Math.random() - 0.5) * 16,
+      y:  initial.y + (Math.random() - 0.5) * 16,
       vx: 0, vy: 0,
       rx: 0, ry: 0,
       floatPhase: (t.id * 2.399) % (Math.PI * 2),
@@ -146,7 +159,6 @@ function buildNodes(
 
 function resolveLayout(nodes: GraphNode[]): void {
   const anchors = nodes.map(node => ({ x: node.x, y: node.y }));
-  const maxR = TERRAIN_WORLD * 0.84;
 
   // ── Seed: keep initial random world-space positions as-is
   // Pure chaos means each node starts somewhere random, then collision relaxation
@@ -175,9 +187,9 @@ function resolveLayout(nodes: GraphNode[]): void {
           b.x -= nx * push; b.y -= ny * push;
         }
       }
-      // Clamp to world boundary
-      const d = Math.sqrt(a.x * a.x + a.y * a.y);
-      if (d > maxR) { a.x *= maxR / d; a.y *= maxR / d; }
+      const clamped = clampToWorld(a.x, a.y);
+      a.x = clamped.x;
+      a.y = clamped.y;
     }
   }
 
@@ -203,8 +215,9 @@ function resolveLayout(nodes: GraphNode[]): void {
           b.x -= nx * push; b.y -= ny * push;
         }
       }
-      const d = Math.sqrt(a.x * a.x + a.y * a.y);
-      if (d > maxR) { a.x *= maxR / d; a.y *= maxR / d; }
+      const clamped = clampToWorld(a.x, a.y);
+      a.x = clamped.x;
+      a.y = clamped.y;
     }
   }
 
@@ -219,13 +232,18 @@ function resolveLayout(nodes: GraphNode[]): void {
 // Relax layout around a specific node (for interactive dragging)
 // viewScale: current canvas zoom — used to compute a world-space push radius
 // that stays proportional at any zoom level.
-function relaxLayoutAround(nodes: GraphNode[], draggedIndex: number, iterations: number = 20, viewScale: number = 1): void {
-  const maxRadius = TERRAIN_WORLD * 0.78;
+function relaxLayoutAround(
+  nodes: GraphNode[],
+  draggedIndex: number,
+  iterations: number = 20,
+  viewScale: number = 1,
+  bowStrength: number = 1,
+): void {
   const dragged = nodes[draggedIndex];
 
-  // The "bow-wave" radius: at zoom 1 it's ~200 world-px; at zoom 0.1 it's ~2000 world-px.
-  // This ensures the ripple is always clearly visible on screen regardless of zoom.
-  const bowRadius = Math.max(dragged.radius * 8, 200 / Math.max(viewScale, 0.05));
+  // Localized zoom-aware bow-wave: still visible when zoomed out, but no longer
+  // throws far-away nodes across the graph.
+  const bowRadius = Math.max(dragged.radius * 4.2, 95 / Math.max(viewScale, 0.08));
 
   for (let iter = 0; iter < iterations; iter++) {
     for (let i = 0; i < nodes.length; i++) {
@@ -244,11 +262,11 @@ function relaxLayoutAround(nodes: GraphNode[], draggedIndex: number, iterations:
         const d = Math.sqrt(d2);
 
         if (j === draggedIndex) {
-          // Long-range bow-wave: smooth cosine falloff from dragged node
+          // Local bow-wave: nearby nodes flow aside while distant ones stay mostly still.
           if (d < bowRadius) {
-            const t = 1 - d / bowRadius;                   // 1 at centre → 0 at edge
-            const smooth = t * t * (3 - 2 * t);            // smoothstep
-            const strength = smooth * bowRadius * 0.12;
+            const t = 1 - d / bowRadius;
+            const smooth = t * t * (3 - 2 * t);
+            const strength = smooth * bowRadius * 0.026 * bowStrength;
             fx += (dx / d) * strength;
             fy += (dy / d) * strength;
           }
@@ -270,12 +288,11 @@ function relaxLayoutAround(nodes: GraphNode[], draggedIndex: number, iterations:
       node.rx = node.x;
       node.ry = node.y;
 
-      const dist = Math.sqrt(node.x * node.x + node.y * node.y);
-      if (dist > maxRadius) {
-        const s = maxRadius / dist;
-        node.x *= s; node.y *= s;
-        node.rx = node.x; node.ry = node.y;
-      }
+      const clamped = clampToWorld(node.x, node.y);
+      node.x = clamped.x;
+      node.y = clamped.y;
+      node.rx = node.x;
+      node.ry = node.y;
     }
   }
 }
@@ -307,6 +324,8 @@ function buildEdges(nodes: GraphNode[], dims: string[]): Edge[] {
 // Gives a smooth Voronoi-like "emotion territory" background.
 
 const TERRAIN_WORLD = 1100;  // half-extent; poles sit at r≈310; enlarged for 650+ nodes
+const WORLD_HALF_W = TERRAIN_WORLD * 1.12;
+const WORLD_HALF_H = TERRAIN_WORLD * 0.74;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -342,6 +361,7 @@ export default function EmotionGraph() {
   const animRef        = useRef(0);
   const drag           = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });
   const cursorWorldRef = useRef<{ x: number; y: number } | null>(null); // live world-space cursor for in-loop physics
+  const releaseFlowRef = useRef<{ active: boolean; nodeIdx: number; strength: number }>({ active: false, nodeIdx: -1, strength: 0 });
 
   useEffect(() => { filterRef.current    = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
   useEffect(() => { focusedRef.current   = focused; }, [focused]);
@@ -384,6 +404,7 @@ export default function EmotionGraph() {
         polesRef.current   = poles;
         nodesRef.current   = nodes;
         edgesRef.current   = buildEdges(nodes, keys);
+        releaseFlowRef.current = { active: false, nodeIdx: -1, strength: 0 };
         floatActive.current = false;
         simActive.current  = false;
         revealStartRef.current = performance.now();
@@ -455,7 +476,14 @@ export default function EmotionGraph() {
           const cur = cursorWorldRef.current;
           dragged.x  = cur.x; dragged.y  = cur.y;
           dragged.rx = cur.x; dragged.ry = cur.y;
-          relaxLayoutAround(nodes, dragIdx, 4, t.scale); // 4 iters per frame ≈ smooth 60fps wave
+          relaxLayoutAround(nodes, dragIdx, 2, t.scale, 1); // local, continuous restructuring while dragging
+        }
+      } else if (releaseFlowRef.current.active && releaseFlowRef.current.nodeIdx >= 0) {
+        const flow = releaseFlowRef.current;
+        relaxLayoutAround(nodes, flow.nodeIdx, 2, t.scale, flow.strength);
+        flow.strength *= 0.92;
+        if (flow.strength < 0.08) {
+          releaseFlowRef.current = { active: false, nodeIdx: -1, strength: 0 };
         }
       }
 
@@ -671,6 +699,7 @@ export default function EmotionGraph() {
     
     if (e.button === 0 && node) {
       // Left-click on node: drag the node itself
+      releaseFlowRef.current = { active: false, nodeIdx: -1, strength: 0 };
       cursorWorldRef.current = w;
       drag.current = { 
         on: true, sx: e.clientX, sy: e.clientY, ox: 0, oy: 0,
@@ -705,8 +734,9 @@ export default function EmotionGraph() {
         // Update the rest position and trigger extended physics relaxation
         draggedNode.rx = draggedNode.x;
         draggedNode.ry = draggedNode.y;
-        // Run intensive relaxation iterations (100) to ensure no overlaps and smooth settling
-        relaxLayoutAround(nodesRef.current, nodeIdx, 100, tf.current.scale);
+        // Small immediate settle, then continue flowing in the render loop.
+        relaxLayoutAround(nodesRef.current, nodeIdx, 6, tf.current.scale, 0.75);
+        releaseFlowRef.current = { active: true, nodeIdx, strength: 0.9 };
       }
       return;
     }
@@ -739,7 +769,15 @@ export default function EmotionGraph() {
     }
   }, [toWorld, hitTest]);
 
-  const onMouseLeave = useCallback(() => { drag.current.on = false; hoveredRef.current = null; }, []);
+  const onMouseLeave = useCallback(() => {
+    if (drag.current.nodeOn && drag.current.nodeIdx >= 0) {
+      releaseFlowRef.current = { active: true, nodeIdx: drag.current.nodeIdx, strength: 0.6 };
+    }
+    cursorWorldRef.current = null;
+    drag.current.on = false;
+    drag.current.nodeOn = false;
+    hoveredRef.current = null;
+  }, []);
 
   const resetView = useCallback(() => {
     const c = containerRef.current;
