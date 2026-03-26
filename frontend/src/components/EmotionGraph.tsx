@@ -218,56 +218,50 @@ function resolveLayout(nodes: GraphNode[]): void {
 function relaxLayoutAround(
   nodes: GraphNode[],
   draggedIndex: number,
-  iterations: number = 20,
+  iterations: number = 6,
   viewScale: number = 1,
   bowStrength: number = 1,
-  updateRestPos: boolean = false, // only true on release, NOT during live drag
+  updateRestPos: boolean = false,
 ): void {
   const dragged = nodes[draggedIndex];
-  const bowRadius = Math.max(dragged.radius * 3.5, 70 / Math.max(viewScale, 0.08));
+  // Bow radius scales with zoom so it's visible at any zoom level
+  const bowRadius = Math.max(dragged.radius * 5, 120 / Math.max(viewScale, 0.07));
 
   for (let iter = 0; iter < iterations; iter++) {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
       if (i === draggedIndex) continue;
 
-      let fx = 0, fy = 0;
+      const dxd = node.x - dragged.x;
+      const dyd = node.y - dragged.y;
+      const distToDragged = Math.sqrt(dxd * dxd + dyd * dyd) || 0.01;
 
+      // Bow-wave push from dragged node
+      if (distToDragged < bowRadius) {
+        const t = 1 - distToDragged / bowRadius;
+        const smooth = t * t * (3 - 2 * t);
+        const strength = smooth * bowRadius * 0.03 * bowStrength;
+        node.x += (dxd / distToDragged) * strength;
+        node.y += (dyd / distToDragged) * strength;
+      }
+
+      // Overlap repulsion with all other non-dragged nodes
       for (let j = 0; j < nodes.length; j++) {
-        if (i === j) continue;
+        if (j === i || j === draggedIndex) continue;
         const other = nodes[j];
         const dx = node.x - other.x;
         const dy = node.y - other.y;
         const d2 = dx * dx + dy * dy;
-        if (d2 < 0.01) continue;
-        const d = Math.sqrt(d2);
-
-        if (j === draggedIndex) {
-          if (d < bowRadius) {
-            const t = 1 - d / bowRadius;
-            const smooth = t * t * (3 - 2 * t);
-            const strength = smooth * bowRadius * 0.018 * bowStrength;
-            fx += (dx / d) * strength;
-            fy += (dy / d) * strength;
-          }
-        } else {
-          const minD = node.radius + other.radius + 22;
-          if (d < minD) {
-            const overlap = minD - d;
-            fx += (dx / d) * overlap * 0.45;
-            fy += (dy / d) * overlap * 0.45;
-          }
+        if (d2 < 0.01) { node.x += 1; continue; }
+        const minD = node.radius + other.radius + 20;
+        if (d2 < minD * minD) {
+          const d = Math.sqrt(d2);
+          const push = (minD - d) * 0.4;
+          node.x += (dx / d) * push;
+          node.y += (dy / d) * push;
         }
       }
 
-      // Spring back toward rest position — prevents cumulative drift while dragging
-      if (!updateRestPos) {
-        fx += (node.rx - node.x) * 0.08;
-        fy += (node.ry - node.y) * 0.08;
-      }
-
-      node.x += fx;
-      node.y += fy;
       if (updateRestPos) {
         node.rx = node.x;
         node.ry = node.y;
@@ -339,8 +333,7 @@ export default function EmotionGraph() {
   const revealStartRef = useRef(0);
   const animRef        = useRef(0);
   const drag           = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });
-  const cursorWorldRef = useRef<{ x: number; y: number } | null>(null); // live world-space cursor for in-loop physics
-  const releaseFlowRef = useRef<{ active: boolean; nodeIdx: number; strength: number }>({ active: false, nodeIdx: -1, strength: 0 });
+  const cursorWorldRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => { filterRef.current    = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
   useEffect(() => { focusedRef.current   = focused; }, [focused]);
@@ -383,7 +376,6 @@ export default function EmotionGraph() {
         polesRef.current   = poles;
         nodesRef.current   = nodes;
         edgesRef.current   = buildEdges(nodes, keys);
-        releaseFlowRef.current = { active: false, nodeIdx: -1, strength: 0 };
         floatActive.current = false;
         simActive.current  = false;
         revealStartRef.current = performance.now();
@@ -445,9 +437,7 @@ export default function EmotionGraph() {
         }
       }
 
-      // ── Drag physics — runs in-loop so it takes effect AFTER float overwrites ──
-      // This is the only place that moves nodes during a drag; the event handler
-      // just updates cursorWorldRef and nothing else.
+      // ── Drag physics — in render loop so it runs after float overwrites x/y ──
       if (drag.current.nodeOn && drag.current.nodeIdx >= 0 && cursorWorldRef.current) {
         const dragIdx = drag.current.nodeIdx;
         const dragged = nodes[dragIdx];
@@ -455,14 +445,8 @@ export default function EmotionGraph() {
           const cur = cursorWorldRef.current;
           dragged.x  = cur.x; dragged.y  = cur.y;
           dragged.rx = cur.x; dragged.ry = cur.y;
-          relaxLayoutAround(nodes, dragIdx, 2, t.scale, 1, false); // spring back, no rest-pos update
-        }
-      } else if (releaseFlowRef.current.active && releaseFlowRef.current.nodeIdx >= 0) {
-        const flow = releaseFlowRef.current;
-        relaxLayoutAround(nodes, flow.nodeIdx, 3, t.scale, flow.strength, true); // update rest pos during settle
-        flow.strength *= 0.975; // slow decay: ~3s at 60fps before dying out
-        if (flow.strength < 0.04) {
-          releaseFlowRef.current = { active: false, nodeIdx: -1, strength: 0 };
+          // 3 iters per frame: nodes part around the dragged node, rx/ry NOT updated so they spring back when released
+          relaxLayoutAround(nodes, dragIdx, 3, t.scale, 1, false);
         }
       }
 
@@ -692,7 +676,6 @@ export default function EmotionGraph() {
     
     if (e.button === 0 && node) {
       // Left-click on node: drag the node itself
-      releaseFlowRef.current = { active: false, nodeIdx: -1, strength: 0 };
       cursorWorldRef.current = w;
       drag.current = { 
         on: true, sx: e.clientX, sy: e.clientY, ox: 0, oy: 0,
@@ -720,17 +703,32 @@ export default function EmotionGraph() {
     drag.current.nodeOn = false;
     canvasRef.current!.style.cursor = 'grab';
 
-    // If we were dragging a node, trigger extended relaxation on release for smooth settling
+    // If we were dragging a node, resolve overlaps once and commit positions
     if (wasNodeDrag && moved && nodeIdx >= 0) {
-      const draggedNode = nodesRef.current[nodeIdx];
-      if (draggedNode) {
-        // Update the rest position and trigger extended physics relaxation
-        draggedNode.rx = draggedNode.x;
-        draggedNode.ry = draggedNode.y;
-        // Small immediate settle, then continue flowing in the render loop.
-        relaxLayoutAround(nodesRef.current, nodeIdx, 6, tf.current.scale, 0.75, true);
-        releaseFlowRef.current = { active: true, nodeIdx, strength: 1.4 };
+      const allNodes = nodesRef.current;
+      // One clean burst of pure collision separation — no bow-wave, no ongoing flow
+      for (let iter = 0; iter < 35; iter++) {
+        for (let i = 0; i < allNodes.length; i++) {
+          if (i === nodeIdx) continue;
+          for (let j = i + 1; j < allNodes.length; j++) {
+            if (j === nodeIdx) continue;
+            const a = allNodes[i], b = allNodes[j];
+            const dx = a.x - b.x, dy = a.y - b.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < 0.01) { a.x += 1; b.x -= 1; continue; }
+            const minD = a.radius + b.radius + 20;
+            if (d2 < minD * minD) {
+              const d = Math.sqrt(d2);
+              const push = (minD - d) * 0.5;
+              const nx = dx / d, ny = dy / d;
+              a.x += nx * push; a.y += ny * push;
+              b.x -= nx * push; b.y -= ny * push;
+            }
+          }
+        }
       }
+      // Commit all final positions as new rest positions
+      allNodes.forEach(n => { n.rx = n.x; n.ry = n.y; });
       return;
     }
 
@@ -763,8 +761,8 @@ export default function EmotionGraph() {
   }, [toWorld, hitTest]);
 
   const onMouseLeave = useCallback(() => {
-    if (drag.current.nodeOn && drag.current.nodeIdx >= 0) {
-      releaseFlowRef.current = { active: true, nodeIdx: drag.current.nodeIdx, strength: 1.2 };
+    if (drag.current.nodeOn) {
+      nodesRef.current.forEach(n => { n.rx = n.x; n.ry = n.y; });
     }
     cursorWorldRef.current = null;
     drag.current.on = false;
