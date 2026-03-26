@@ -217,46 +217,64 @@ function resolveLayout(nodes: GraphNode[]): void {
 }
 
 // Relax layout around a specific node (for interactive dragging)
-function relaxLayoutAround(nodes: GraphNode[], draggedIndex: number, iterations: number = 20): void {
+// viewScale: current canvas zoom — used to compute a world-space push radius
+// that stays proportional at any zoom level.
+function relaxLayoutAround(nodes: GraphNode[], draggedIndex: number, iterations: number = 20, viewScale: number = 1): void {
   const maxRadius = TERRAIN_WORLD * 0.78;
-  
+  const dragged = nodes[draggedIndex];
+
+  // The "bow-wave" radius: at zoom 1 it's ~200 world-px; at zoom 0.1 it's ~2000 world-px.
+  // This ensures the ripple is always clearly visible on screen regardless of zoom.
+  const bowRadius = Math.max(dragged.radius * 8, 200 / Math.max(viewScale, 0.05));
+
   for (let iter = 0; iter < iterations; iter++) {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
-      if (i === draggedIndex) continue; // dragged node is fixed by user
-      
+      if (i === draggedIndex) continue;
+
       let fx = 0, fy = 0;
-      
+
       for (let j = 0; j < nodes.length; j++) {
         if (i === j) continue;
         const other = nodes[j];
         const dx = node.x - other.x;
         const dy = node.y - other.y;
         const d2 = dx * dx + dy * dy;
-        
         if (d2 < 0.01) continue;
-        
-        const minD = node.radius + other.radius + 8;
-        if (d2 < minD * minD) {
-          const d = Math.sqrt(d2);
-          const overlap = minD - d;
-          const repulsion = overlap * (j === draggedIndex ? 1.2 : 0.6); // stronger push from dragged
-          const nx = dx / d;
-          const ny = dy / d;
-          fx += nx * repulsion;
-          fy += ny * repulsion;
+        const d = Math.sqrt(d2);
+
+        if (j === draggedIndex) {
+          // Long-range bow-wave: smooth cosine falloff from dragged node
+          if (d < bowRadius) {
+            const t = 1 - d / bowRadius;                   // 1 at centre → 0 at edge
+            const smooth = t * t * (3 - 2 * t);            // smoothstep
+            const strength = smooth * bowRadius * 0.12;
+            fx += (dx / d) * strength;
+            fy += (dy / d) * strength;
+          }
+        } else {
+          // Standard overlap repulsion between non-dragged nodes
+          const minD = node.radius + other.radius + 22;
+          if (d < minD) {
+            const overlap = minD - d;
+            const repulsion = overlap * 0.55;
+            fx += (dx / d) * repulsion;
+            fy += (dy / d) * repulsion;
+          }
         }
       }
-      
+
       node.x += fx;
       node.y += fy;
-      
-      // Clamp to boundary
+      // Keep rest position in sync so float mode doesn't snap back
+      node.rx = node.x;
+      node.ry = node.y;
+
       const dist = Math.sqrt(node.x * node.x + node.y * node.y);
       if (dist > maxRadius) {
-        const scale = maxRadius / dist;
-        node.x *= scale;
-        node.y *= scale;
+        const s = maxRadius / dist;
+        node.x *= s; node.y *= s;
+        node.rx = node.x; node.ry = node.y;
       }
     }
   }
@@ -626,8 +644,8 @@ export default function EmotionGraph() {
         node.y = w.y;
         node.rx = w.x;
         node.ry = w.y;
-        // Push nearby nodes out of the way — aggressive relaxation to keep graph balanced
-        relaxLayoutAround(nodesRef.current, d.nodeIdx, 20);
+        // Push nearby nodes out of the way — zoom-aware bow-wave so always visible on screen
+        relaxLayoutAround(nodesRef.current, d.nodeIdx, 20, tf.current.scale);
       }
       return;
     }
@@ -681,7 +699,7 @@ export default function EmotionGraph() {
         draggedNode.rx = draggedNode.x;
         draggedNode.ry = draggedNode.y;
         // Run intensive relaxation iterations (100) to ensure no overlaps and smooth settling
-        relaxLayoutAround(nodesRef.current, nodeIdx, 100);
+        relaxLayoutAround(nodesRef.current, nodeIdx, 100, tf.current.scale);
       }
       return;
     }
