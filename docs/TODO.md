@@ -90,6 +90,7 @@ This file tracks major tasks and features to complete the doyou-world-scraper pr
   - See docs/ANALYTICS_INTEGRATION.md for setup
 - [ ] **Frontend Test Suite (PRIORITY 3)** - Install Vitest + React Testing Library + jsdom, add comprehensive tests for all components, hooks, and services (currently 0% coverage)
 - [ ] **Music exploration graph (PRIORITY 4)** - Energy vs Danceability scatter plot, BPM histogram, key/mode distribution, interactive filtering by audio features; data sourced from analytics API `/api/v1/tracks`
+- [ ] **Selected items styling + persistent selected edges** - Improve selected node visual treatment and ensure edges between selected nodes remain clearly highlighted/persistent across interactions (hover, drag, release)
 - [ ] **UI overhaul** - Dark theme polish, animated chart transitions, improved visual hierarchy, better mobile layout
 - [ ] **Label intelligence pipeline (NEW)**
   - [ ] Define canonical mapping from curated `label_path` → feature vectors (emotion targets, BPM range, energy/valence bands)

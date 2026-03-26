@@ -71,6 +71,7 @@ interface GraphNode {
   emotions: Record<string, number>;
   x: number; vx: number;
   y: number; vy: number;
+  homeX: number; homeY: number; // balanced anchor position
   rx: number; ry: number;      // rest position for float mode
   floatPhase: number;          // unique oscillation phase per node
   radius: number;
@@ -82,6 +83,70 @@ interface Edge {
   a: GraphNode;
   b: GraphNode;
   weight: number;
+}
+
+interface PhysicsTuning {
+  radiusScale: number;
+  radiusBase: number;
+  radialPush: number;
+  wakePush: number;
+  nearPush: number;
+  springBack: number;
+  settleDamping: number;
+  collisionPush: number;
+  maxVelocity: number;
+}
+
+const DEFAULT_PHYSICS: PhysicsTuning = {
+  radiusScale: 17.5,
+  radiusBase: 260,
+  radialPush: 1.2,
+  wakePush: 1.2,
+  nearPush: 0.45,
+  springBack: 0.032,
+  settleDamping: 0.98,
+  collisionPush: 0.14,
+  maxVelocity: 14,
+};
+
+const FLUIDITY_MIN: PhysicsTuning = {
+  radiusScale: 9,
+  radiusBase: 220,
+  radialPush: 0.4,
+  wakePush: 0.2,
+  nearPush: 0.28,
+  springBack: 0.052,
+  settleDamping: 0.963,
+  collisionPush: 0.07,
+  maxVelocity: 10,
+};
+
+const FLUIDITY_MAX: PhysicsTuning = {
+  radiusScale: 26,
+  radiusBase: 300,
+  radialPush: 2.0,
+  wakePush: 2.2,
+  nearPush: 0.62,
+  springBack: 0.012,
+  settleDamping: 0.997,
+  collisionPush: 0.21,
+  maxVelocity: 18,
+};
+
+function fluidityToPhysics(level: number): PhysicsTuning {
+  const t = Math.max(0, Math.min(1, level / 100));
+  const lerp = (a: number, b: number) => a + (b - a) * t;
+  return {
+    radiusScale: lerp(FLUIDITY_MIN.radiusScale, FLUIDITY_MAX.radiusScale),
+    radiusBase: lerp(FLUIDITY_MIN.radiusBase, FLUIDITY_MAX.radiusBase),
+    radialPush: lerp(FLUIDITY_MIN.radialPush, FLUIDITY_MAX.radialPush),
+    wakePush: lerp(FLUIDITY_MIN.wakePush, FLUIDITY_MAX.wakePush),
+    nearPush: lerp(FLUIDITY_MIN.nearPush, FLUIDITY_MAX.nearPush),
+    springBack: lerp(FLUIDITY_MIN.springBack, FLUIDITY_MAX.springBack),
+    settleDamping: lerp(FLUIDITY_MIN.settleDamping, FLUIDITY_MAX.settleDamping),
+    collisionPush: lerp(FLUIDITY_MIN.collisionPush, FLUIDITY_MAX.collisionPush),
+    maxVelocity: lerp(FLUIDITY_MIN.maxVelocity, FLUIDITY_MAX.maxVelocity),
+  };
 }
 
 // ─── drawRoundRect ────────────────────────────────────────────────────────────
@@ -137,6 +202,7 @@ function buildNodes(
       x:  ix,
       y:  iy,
       vx: 0, vy: 0,
+      homeX: 0, homeY: 0,
       rx: 0, ry: 0,
       floatPhase: (t.id * 2.399) % (Math.PI * 2),
       radius: NODE_MIN_R + energy * (NODE_MAX_R - NODE_MIN_R),
@@ -205,6 +271,8 @@ function resolveLayout(nodes: GraphNode[]): void {
   }
 
   nodes.forEach(node => {
+    node.homeX = node.x;
+    node.homeY = node.y;
     node.rx = node.x;
     node.ry = node.y;
     node.vx = 0;
@@ -218,55 +286,120 @@ function resolveLayout(nodes: GraphNode[]): void {
 function relaxLayoutAround(
   nodes: GraphNode[],
   draggedIndex: number,
-  iterations: number = 6,
+  tuning: PhysicsTuning,
   viewScale: number = 1,
   bowStrength: number = 1,
-  updateRestPos: boolean = false,
+  dragVx: number = 0,
+  dragVy: number = 0,
 ): void {
   const dragged = nodes[draggedIndex];
-  // Bow radius scales with zoom so it's visible at any zoom level
-  const bowRadius = Math.max(dragged.radius * 5, 120 / Math.max(viewScale, 0.07));
+  // Drag flow field: strong near cursor, fades smoothly with distance.
+  const bowRadius = Math.max(dragged.radius * tuning.radiusScale, tuning.radiusBase / Math.max(viewScale, 0.07));
+  const dragSpeed = Math.sqrt(dragVx * dragVx + dragVy * dragVy);
+  const invDrag = dragSpeed > 0.0001 ? 1 / dragSpeed : 0;
+  const dirX = dragVx * invDrag;
+  const dirY = dragVy * invDrag;
 
-  for (let iter = 0; iter < iterations; iter++) {
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i];
-      if (i === draggedIndex) continue;
+  for (let i = 0; i < nodes.length; i++) {
+    if (i === draggedIndex) continue;
+    const node = nodes[i];
+    const dx = node.rx - dragged.rx;
+    const dy = node.ry - dragged.ry;
+    const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+    if (d < bowRadius) {
+      const tVal = 1 - d / bowRadius;
+      const smooth = tVal * tVal * (3 - 2 * tVal);
+      const radialImpulse = smooth * (tuning.radialPush + dragSpeed * 1.1) * bowStrength;
+      const wakeImpulse = smooth * (tuning.wakePush + dragSpeed * 0.95);
+      node.vx += (dx / d) * radialImpulse + dirX * wakeImpulse;
+      node.vy += (dy / d) * radialImpulse + dirY * wakeImpulse;
 
-      const dxd = node.x - dragged.x;
-      const dyd = node.y - dragged.y;
-      const distToDragged = Math.sqrt(dxd * dxd + dyd * dyd) || 0.01;
-
-      // Bow-wave push from dragged node
-      if (distToDragged < bowRadius) {
-        const t = 1 - distToDragged / bowRadius;
-        const smooth = t * t * (3 - 2 * t);
-        const strength = smooth * bowRadius * 0.03 * bowStrength;
-        node.x += (dxd / distToDragged) * strength;
-        node.y += (dyd / distToDragged) * strength;
+      // Hard separation very close to the dragged node.
+      const minD = dragged.radius + node.radius + 20;
+      if (d < minD) {
+        const push = (minD - d) * tuning.nearPush;
+        node.vx += (dx / d) * push;
+        node.vy += (dy / d) * push;
       }
 
-      // Overlap repulsion with all other non-dragged nodes
-      for (let j = 0; j < nodes.length; j++) {
-        if (j === i || j === draggedIndex) continue;
-        const other = nodes[j];
-        const dx = node.x - other.x;
-        const dy = node.y - other.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < 0.01) { node.x += 1; continue; }
-        const minD = node.radius + other.radius + 20;
-        if (d2 < minD * minD) {
-          const d = Math.sqrt(d2);
-          const push = (minD - d) * 0.4;
-          node.x += (dx / d) * push;
-          node.y += (dy / d) * push;
-        }
-      }
-
-      if (updateRestPos) {
-        node.rx = node.x;
-        node.ry = node.y;
+      // Keep speeds bounded to avoid jitter spikes.
+      const v = Math.sqrt(node.vx * node.vx + node.vy * node.vy);
+      const maxV = tuning.maxVelocity;
+      if (v > maxV) {
+        const s = maxV / v;
+        node.vx *= s;
+        node.vy *= s;
       }
     }
+  }
+
+  // Soft overlap separation via velocity (not hard position snapping)
+  for (let iter = 0; iter < 1; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      if (i === draggedIndex) continue;
+      for (let j = i + 1; j < nodes.length; j++) {
+        if (j === draggedIndex) continue;
+        const a = nodes[i], b = nodes[j];
+        const dx = a.rx - b.rx, dy = a.ry - b.ry;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 0.01) { a.vx += 0.2; b.vx -= 0.2; continue; }
+        const minD = a.radius + b.radius + 18;
+        if (d2 < minD * minD) {
+          const d = Math.sqrt(d2);
+          const push = (minD - d) * 0.08;
+          const nx = dx / d, ny = dy / d;
+          a.vx += nx * push; a.vy += ny * push;
+          b.vx -= nx * push; b.vy -= ny * push;
+        }
+      }
+    }
+  }
+}
+
+function stepLayoutPhysics(nodes: GraphNode[], draggedIndex: number, tuning: PhysicsTuning): void {
+  // 1) Weak spring to balanced anchor positions (keeps graph coherent after release)
+  for (let i = 0; i < nodes.length; i++) {
+    if (i === draggedIndex) continue;
+    const n = nodes[i];
+    n.vx += (n.homeX - n.rx) * tuning.springBack;
+    n.vy += (n.homeY - n.ry) * tuning.springBack;
+  }
+
+  // 2) Neighbour collision response as smooth velocity impulses
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      if (i === draggedIndex || j === draggedIndex) continue;
+      const a = nodes[i], b = nodes[j];
+      const dx = a.rx - b.rx;
+      const dy = a.ry - b.ry;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < 0.0001) {
+        a.vx += 0.05;
+        b.vx -= 0.05;
+        continue;
+      }
+      const minD = a.radius + b.radius + 18;
+      if (d2 < minD * minD) {
+        const d = Math.sqrt(d2);
+        const nx = dx / d;
+        const ny = dy / d;
+        const push = (minD - d) * tuning.collisionPush;
+        a.vx += nx * push; a.vy += ny * push;
+        b.vx -= nx * push; b.vy -= ny * push;
+      }
+    }
+  }
+
+  // 3) Integrate with damping (smooth deceleration)
+  for (let i = 0; i < nodes.length; i++) {
+    if (i === draggedIndex) continue;
+    const n = nodes[i];
+    n.vx *= tuning.settleDamping;
+    n.vy *= tuning.settleDamping;
+    if (Math.abs(n.vx) < 0.005) n.vx = 0;
+    if (Math.abs(n.vy) < 0.005) n.vy = 0;
+    n.rx += n.vx;
+    n.ry += n.vy;
   }
 }
 
@@ -317,6 +450,8 @@ export default function EmotionGraph() {
   const [threshold, setThresh]    = useState(0.5);
   const [settled, setSettled]     = useState(false);
   const [showEdges, setShowEdges] = useState(true);
+  const [fluidity, setFluidity]   = useState(50);
+  const [physics, setPhysics]     = useState<PhysicsTuning>(DEFAULT_PHYSICS);
 
   const nodesRef       = useRef<GraphNode[]>([]);
   const polesRef       = useRef<Pole[]>([]);
@@ -334,10 +469,14 @@ export default function EmotionGraph() {
   const animRef        = useRef(0);
   const drag           = useRef({ on: false, sx: 0, sy: 0, ox: 0, oy: 0, nodeOn: false, nodeIdx: -1, lastX: 0, lastY: 0 });
   const cursorWorldRef = useRef<{ x: number; y: number } | null>(null);
+  const dragVelRef     = useRef({ x: 0, y: 0 });
+  const physicsRef     = useRef<PhysicsTuning>(DEFAULT_PHYSICS);
 
   useEffect(() => { filterRef.current    = { emotion: filterEmotion, threshold }; }, [filterEmotion, threshold]);
   useEffect(() => { focusedRef.current   = focused; }, [focused]);
   useEffect(() => { showEdgesRef.current = showEdges; }, [showEdges]);
+  useEffect(() => { physicsRef.current   = physics; }, [physics]);
+  useEffect(() => { setPhysics(fluidityToPhysics(fluidity)); }, [fluidity]);
 
   // Fetch label whenever focused node changes
   useEffect(() => {
@@ -428,25 +567,35 @@ export default function EmotionGraph() {
         setSettled(true);
       }
 
-      // Float mode: each bubble gently drifts on its own Lissajous path
-      if (floatActive.current) {
-        const ft = ts * 0.00025;
-        for (const node of nodes) {
-          node.x = node.rx + Math.sin(ft       + node.floatPhase) * 5;
-          node.y = node.ry + Math.cos(ft * 0.73 + node.floatPhase * 1.3) * 5;
+      // ── Drag + layout physics ──
+      const isDraggingNode = drag.current.nodeOn && drag.current.nodeIdx >= 0 && !!cursorWorldRef.current;
+      const dragIdx = isDraggingNode ? drag.current.nodeIdx : -1;
+
+      if (isDraggingNode) {
+        const dragged = nodes[dragIdx];
+        const cur = cursorWorldRef.current!;
+        if (dragged) {
+          dragged.rx = cur.x;
+          dragged.ry = cur.y;
+          dragged.vx = 0;
+          dragged.vy = 0;
+          relaxLayoutAround(nodes, dragIdx, physicsRef.current, t.scale, 1, dragVelRef.current.x, dragVelRef.current.y);
         }
       }
 
-      // ── Drag physics — in render loop so it runs after float overwrites x/y ──
-      if (drag.current.nodeOn && drag.current.nodeIdx >= 0 && cursorWorldRef.current) {
-        const dragIdx = drag.current.nodeIdx;
-        const dragged = nodes[dragIdx];
-        if (dragged) {
-          const cur = cursorWorldRef.current;
-          dragged.x  = cur.x; dragged.y  = cur.y;
-          dragged.rx = cur.x; dragged.ry = cur.y;
-          // 3 iters per frame: nodes part around the dragged node, rx/ry NOT updated so they spring back when released
-          relaxLayoutAround(nodes, dragIdx, 3, t.scale, 1, false);
+      stepLayoutPhysics(nodes, dragIdx, physicsRef.current);
+
+      // Float mode overlays only when node is near-rest, so active flow remains visible.
+      const ft = ts * 0.00025;
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const moving = Math.abs(node.vx) > 0.01 || Math.abs(node.vy) > 0.01;
+        if (floatActive.current && !isDraggingNode && !moving) {
+          node.x = node.rx + Math.sin(ft + node.floatPhase) * 5;
+          node.y = node.ry + Math.cos(ft * 0.73 + node.floatPhase * 1.3) * 5;
+        } else {
+          node.x = node.rx;
+          node.y = node.ry;
         }
       }
 
@@ -657,6 +806,12 @@ export default function EmotionGraph() {
     const w = toWorld(e.clientX, e.clientY);
 
     if (d.on && d.nodeOn) {
+      const dx = w.x - d.lastX;
+      const dy = w.y - d.lastY;
+      dragVelRef.current.x = dragVelRef.current.x * 0.65 + dx * 0.35;
+      dragVelRef.current.y = dragVelRef.current.y * 0.65 + dy * 0.35;
+      drag.current.lastX = w.x;
+      drag.current.lastY = w.y;
       cursorWorldRef.current = w;
       return;
     }
@@ -681,6 +836,7 @@ export default function EmotionGraph() {
         on: true, sx: e.clientX, sy: e.clientY, ox: 0, oy: 0,
         nodeOn: true, nodeIdx: nodesRef.current.indexOf(node), lastX: w.x, lastY: w.y 
       };
+      dragVelRef.current = { x: 0, y: 0 };
       canvasRef.current!.style.cursor = 'grabbing';
     } else if (e.button === 0) {
       // Left-click on empty space: pan
@@ -698,37 +854,29 @@ export default function EmotionGraph() {
     const wasNodeDrag = d.nodeOn;
     const nodeIdx = d.nodeIdx;
 
+    // Always persist dragged node at release point (independent of moved threshold).
+    if (wasNodeDrag && nodeIdx >= 0) {
+      const dropped = nodesRef.current[nodeIdx];
+      if (dropped) {
+        const w = toWorld(e.clientX, e.clientY);
+        dropped.x = w.x;
+        dropped.y = w.y;
+        dropped.rx = w.x;
+        dropped.ry = w.y;
+        dropped.homeX = w.x;
+        dropped.homeY = w.y;
+      }
+    }
+
     cursorWorldRef.current = null;
+    dragVelRef.current = { x: 0, y: 0 };
     drag.current.on = false;
     drag.current.nodeOn = false;
     canvasRef.current!.style.cursor = 'grab';
 
     // If we were dragging a node, resolve overlaps once and commit positions
     if (wasNodeDrag && moved && nodeIdx >= 0) {
-      const allNodes = nodesRef.current;
-      // One clean burst of pure collision separation — no bow-wave, no ongoing flow
-      for (let iter = 0; iter < 35; iter++) {
-        for (let i = 0; i < allNodes.length; i++) {
-          if (i === nodeIdx) continue;
-          for (let j = i + 1; j < allNodes.length; j++) {
-            if (j === nodeIdx) continue;
-            const a = allNodes[i], b = allNodes[j];
-            const dx = a.x - b.x, dy = a.y - b.y;
-            const d2 = dx * dx + dy * dy;
-            if (d2 < 0.01) { a.x += 1; b.x -= 1; continue; }
-            const minD = a.radius + b.radius + 20;
-            if (d2 < minD * minD) {
-              const d = Math.sqrt(d2);
-              const push = (minD - d) * 0.5;
-              const nx = dx / d, ny = dy / d;
-              a.x += nx * push; a.y += ny * push;
-              b.x -= nx * push; b.y -= ny * push;
-            }
-          }
-        }
-      }
-      // Commit all final positions as new rest positions
-      allNodes.forEach(n => { n.rx = n.x; n.ry = n.y; });
+      // Velocities decay naturally via damping — no burst, no snap.
       return;
     }
 
@@ -761,10 +909,19 @@ export default function EmotionGraph() {
   }, [toWorld, hitTest]);
 
   const onMouseLeave = useCallback(() => {
-    if (drag.current.nodeOn) {
-      nodesRef.current.forEach(n => { n.rx = n.x; n.ry = n.y; });
+    const d = drag.current;
+    if (d.nodeOn && d.nodeIdx >= 0) {
+      const dropped = nodesRef.current[d.nodeIdx];
+      if (dropped) {
+        // Leaving canvas while dragging should still persist the drop position.
+        dropped.homeX = dropped.rx;
+        dropped.homeY = dropped.ry;
+      }
     }
+    // Natural release on leave: keep current velocities so nodes decelerate smoothly.
+    // Do not snap rx/ry or zero vx/vy here.
     cursorWorldRef.current = null;
+    dragVelRef.current = { x: 0, y: 0 };
     drag.current.on = false;
     drag.current.nodeOn = false;
     hoveredRef.current = null;
@@ -820,7 +977,7 @@ export default function EmotionGraph() {
         <div className="px-4 py-3 border-b border-slate-800">
           <h3 className="text-slate-400 font-bold text-xs uppercase tracking-widest">Emotion Filter</h3>
         </div>
-        <div className="p-2 space-y-0.5 flex-1">
+        <div className="p-2 space-y-0.5 max-h-52 overflow-y-auto">
           <button onClick={() => setFE(null)}
             className={`w-full text-left px-3 py-1.5 rounded text-xs transition ${filterEmotion === null ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}>
             All ({nodeCount})
@@ -844,6 +1001,37 @@ export default function EmotionGraph() {
             <p className="text-slate-700 text-xs">Dim below threshold</p>
           </div>
         )}
+        <div className="p-3 border-t border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Fluidity (Live)</p>
+            <button
+              onClick={() => setFluidity(50)}
+              className="text-[10px] text-slate-600 hover:text-slate-300 transition"
+            >
+              Reset
+            </button>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between text-[11px] text-slate-500">
+              <span>Barely fluid</span>
+              <span className="text-slate-300 font-mono">{fluidity}%</span>
+              <span>Extra fluid</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={fluidity}
+              onChange={e => setFluidity(Number(e.target.value))}
+              className="w-full accent-violet-500"
+            />
+          </div>
+          <p className="text-slate-700 text-[11px] leading-4">
+            Default at load is your tuned baseline. This single bar scales reach, push, flow, return, slowdown, and spacing together.
+          </p>
+        </div>
         <div className="p-2 border-t border-slate-800 space-y-0.5">
           <button onClick={() => setShowEdges(v => !v)}
             className="w-full text-left px-3 py-1.5 rounded text-xs text-slate-500 hover:text-white hover:bg-slate-800 transition flex items-center gap-2">
