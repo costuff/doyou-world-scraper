@@ -89,6 +89,8 @@ jobs:
     name: Build Docker Images
     needs: [test, test-frontend]
     runs-on: ubuntu-latest
+    # Fail fast instead of burning the 6-hour default if an emulated build hangs.
+    timeout-minutes: 60
     # Only build on main/master branches, not on develop or PRs
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:

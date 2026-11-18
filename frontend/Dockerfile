@@ -1,5 +1,5 @@
-# Build stage
-FROM node:20-alpine AS builder
+# Build stage runs on the native build platform; the output is static, architecture-independent assets.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 WORKDIR /build
 
