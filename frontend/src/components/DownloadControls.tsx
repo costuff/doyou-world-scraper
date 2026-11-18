@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import apiService from '../services/api';
+import { confirmByTyping } from '../utils/confirmByTyping';
 
 export const DownloadControls = () => {
   const [loading, setLoading] = useState<string | null>(null);
@@ -71,7 +72,7 @@ export const DownloadControls = () => {
   };
 
   const handleClearCSVs = async () => {
-    if (!window.confirm('Are you sure you want to delete all CSV files? This cannot be undone.')) {
+    if (!confirmByTyping('Delete all scraped CSV files?', 'DELETE CSVS')) {
       return;
     }
     
@@ -88,7 +89,7 @@ export const DownloadControls = () => {
   };
 
   const handleClearDownloads = async () => {
-    if (!window.confirm('Are you sure you want to delete ALL downloaded MP3 files? This cannot be undone!')) {
+    if (!confirmByTyping('Delete ALL downloaded MP3 files?', 'DELETE DOWNLOADS')) {
       return;
     }
     
@@ -110,7 +111,7 @@ export const DownloadControls = () => {
       return;
     }
     
-    if (!window.confirm(`Are you sure you want to delete ALL MP3 files from NAS (${nasPath})? This cannot be undone!`)) {
+    if (!confirmByTyping(`Delete ALL MP3 files from NAS (${nasPath})?`, 'DELETE NAS')) {
       return;
     }
     
