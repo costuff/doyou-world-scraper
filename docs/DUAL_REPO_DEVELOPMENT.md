@@ -19,7 +19,10 @@ This workflow lets you run and develop both services together on one machine:
 - Scraper API + Frontend: `https://do-you-world-scraper.costuff.work` (Cloudflare Tunnel)
 - Analytics proxied at: `https://do-you-world-scraper.costuff.work/analytics-api/`
 - nginx in frontend container proxies `/analytics-api/` → `doyou-analytics-api:8080`
-- Frontend container is on both Docker networks (scraper + analytics)
+- Both stacks share the `doyou-network` Docker network.
+- `frontend/nginx.conf` uses Docker DNS with a five-second cache and dynamic upstream
+  resolution (nginx 1.27.3+) so backend IP changes do not leave nginx returning 502s.
+  The frontend image ships this config; a read-only bind mount can override it without a rebuild.
 - Single Watchtower in scraper stack auto-updates all containers on the machine
 
 ## One-Time Setup
@@ -146,3 +149,27 @@ curl http://localhost:8080/api/v1/stats
 ```
 
 If all three work, the stack is healthy. If `pending=0`, worker is idle by design.
+
+### Production proxy recovery
+
+After updating `frontend/nginx.conf` or adding its Compose mount, apply only the
+frontend service (no backend or database restart needed):
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --no-deps --pull never frontend
+curl --fail http://localhost:3001/analytics-api/api/v1/stats/detailed
+```
+
+Use your configured `FRONTEND_PORT` if it differs from `3001` on the Mac Mini.
+For later edits to an already-mounted config, validate and reload nginx with
+`docker exec doyou-frontend nginx -t && docker exec doyou-frontend nginx -s reload`.
+
+Run the isolated proxy regression test with Docker and a locally available frontend
+image (override `NGINX_TEST_IMAGE` if needed):
+
+```bash
+sh scripts/test-nginx-proxy.sh
+```
+
+It replaces mock backends with different IPs and checks that both proxies recover
+without restarting nginx, preserving path prefixes and query strings.

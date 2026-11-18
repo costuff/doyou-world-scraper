@@ -1,5 +1,8 @@
 librosa>=0.10.0
 soundfile>=0.12.0
 numpy>=1.24.0
+# Older numba/llvmlite builds segfault in librosa pitch tracking on linux/arm64.
+numba>=0.68.1
+llvmlite>=0.50.0
 scipy>=1.11.0
 matplotlib>=3.7.0
